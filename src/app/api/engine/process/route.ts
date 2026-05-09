@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { Orchestrator } from '@/lib/engine/orchestrator'
 import { isConversationTakenOver, notifyHumanTakeoverNeeded, notifyHotLead } from '@/lib/telegram/cognitive-bridge'
+import { sendWhatsAppMessage } from '@/lib/whatsapp/channel-bridge'
 import { type LeadArchetype, type LeadTemperature } from '@/lib/engine/types'
 
 export async function POST(request: NextRequest) {
@@ -176,7 +177,15 @@ export async function POST(request: NextRequest) {
     })
 
     // ──────────────────────────────────────────────────────────
-    // STEP 8: Update conversation
+    // STEP 8: Send message via the appropriate channel
+    // ──────────────────────────────────────────────────────────
+    if (conversation.channel === 'WHATSAPP') {
+      sendWhatsAppMessage(workspaceId, conversationId, pipelineResult.responseSuggestion)
+        .catch(err => console.error('[WhatsApp Bridge] Send error:', err))
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // STEP 9: Update conversation
     // ──────────────────────────────────────────────────────────
     await db.conversation.update({
       where: { id: conversationId },

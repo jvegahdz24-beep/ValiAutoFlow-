@@ -20,7 +20,6 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users                          User[]
   contacts                       Contact[]
   conversations                  Conversation[]
   leads                          Lead[]
@@ -44,41 +43,45 @@ model Workspace {
   telegramBotConfigs            TelegramBotConfig[]
   telegramBotSessions           TelegramBotSession[]
   telegramBotCommands           TelegramBotCommand[]
+  whatsappConfigs               WhatsAppConfig[]
+  whatsappTemplates             WhatsAppTemplate[]
+  googleCalendarConfigs         GoogleCalendarConfig[]
+  workspaceMembers              WorkspaceMember[]
 
   @@map("workspaces")
 }
 
 model User {
-  id          String    @id @default(cuid())
-  email       String
-  name        String
-  role        String    @default("AGENT")
-  avatarUrl   String?
-  workspaceId String
-  isActive    Boolean   @default(true)
-  lastSeenAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String
+  image         String?
+  password      String?   // Hashed password for credentials provider
+  role          String    @default("AGENT")
+  avatarUrl     String?
+  workspaceId   String?
+  isActive      Boolean   @default(true)
+  lastSeenAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  sessions            Session[]
-  assignedLeads       Lead[]              @relation("AssignedAgent")
-  assignedDeals       Deal[]              @relation("DealAssignedAgent")
-  auditLogs           AuditLog[]          @relation("AuditUser")
+  accounts         Account[]
+  sessions         Session[]
+  assignedLeads    Lead[]              @relation("AssignedAgent")
+  assignedDeals    Deal[]              @relation("DealAssignedAgent")
+  auditLogs        AuditLog[]          @relation("AuditUser")
+  workspaceMembers WorkspaceMember[]
 
-  @@unique([email, workspaceId])
   @@index([workspaceId])
   @@map("users")
 }
 
 model Session {
-  id         String   @id @default(cuid())
-  userId     String
-  token      String   @unique
-  expiresAt  DateTime
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -940,4 +943,128 @@ model TelegramBotCommand {
   @@index([command])
   @@index([createdAt])
   @@map("telegram_bot_commands")
+}
+
+// ============================================================
+// WHATSAPP CLOUD API (Meta Business)
+// ============================================================
+
+model WhatsAppConfig {
+  id              String   @id @default(cuid())
+  workspaceId     String   @unique
+  phoneNumberId   String   // Meta Phone Number ID
+  businessAccountId String?
+  accessToken     String   // Permanent access token
+  verifyToken     String   // Webhook verification token
+  wabaId          String?  // WhatsApp Business Account ID
+  isActive        Boolean  @default(false)
+  webhookUrl      String?
+  lastSyncAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("whatsapp_configs")
+}
+
+model WhatsAppTemplate {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String   // Template name as registered in Meta
+  language    String   @default("es") // Language code
+  category    String   @default("MARKETING") // MARKETING, UTILITY, AUTHENTICATION
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  body        String   // Template body with {{1}}, {{2}} placeholders
+  headerType  String?  // TEXT, IMAGE, DOCUMENT, VIDEO
+  headerText  String?
+  footerText  String?
+  buttons     String   @default("[]") // JSON: [{ type, text, url, phone_number }]
+  metaId      String?  // Meta template ID
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([status])
+  @@map("whatsapp_templates")
+}
+
+// ============================================================
+// GOOGLE CALENDAR INTEGRATION
+// ============================================================
+
+model GoogleCalendarConfig {
+  id              String   @id @default(cuid())
+  workspaceId     String   @unique
+  clientId        String
+  clientSecret    String
+  refreshToken    String?  // OAuth2 refresh token
+  accessToken     String?  // Current access token (expires)
+  tokenExpiry     DateTime?
+  calendarId      String   @default("primary")
+  isActive        Boolean  @default(false)
+  lastSyncAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("google_calendar_configs")
+}
+
+// ============================================================
+// NEXTAUTH (Multi-workspace authentication)
+// ============================================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  oauth_token_secret String?
+  oauth_token       String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model WorkspaceMember {
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        String   @default("OWNER") // OWNER, ADMIN, AGENT, VIEWER
+  invitedAt   DateTime @default(now())
+  acceptedAt  DateTime?
+  isActive    Boolean  @default(true)
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([userId])
+  @@index([workspaceId])
+  @@map("workspace_members")
 }

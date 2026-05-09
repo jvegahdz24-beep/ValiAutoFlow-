@@ -15,6 +15,8 @@ import { AuditView } from '@/components/dashboard/audit-view'
 import { ConfigView } from '@/components/dashboard/config-view'
 import { MarketingView } from '@/components/dashboard/marketing-view'
 import { TelegramView } from '@/components/telegram/TelegramView'
+import { WhatsAppView } from '@/components/whatsapp/WhatsAppView'
+import CalendarSettings from '@/components/google/CalendarSettings'
 import { useWorkspace } from '@/hooks/use-workspace'
 import { Sparkles } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -80,6 +82,8 @@ function DashboardContent() {
       {activeView === 'config' && <ConfigView workspaceId={workspaceId} />}
       {activeView === 'marketing' && <MarketingView workspaceId={workspaceId} />}
       {activeView === 'telegram' && <TelegramView workspaceId={workspaceId} />}
+      {activeView === 'whatsapp' && <WhatsAppView workspaceId={workspaceId} />}
+      {activeView === 'calendar' && <CalendarSettings workspaceId={workspaceId} />}
     </DashboardShell>
   )
 }
