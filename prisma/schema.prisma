@@ -1,0 +1,736 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// CORE IDENTITY & AUTH
+// ============================================================
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("FREE")
+  settings  String   @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users                          User[]
+  contacts                       Contact[]
+  conversations                  Conversation[]
+  leads                          Lead[]
+  agents                         Agent[]
+  salesPolicies                  SalesPolicy[]
+  trustZones                     TrustZone[]
+  auditLogs                      AuditLog[]
+  webhookConfigs                 WebhookConfig[]
+  pipelines                      Pipeline[]
+  followUpSequences              FollowUpSequence[]
+  toolActions                    ToolAction[]
+  observabilityTraces            ObservabilityTrace[]
+  behavioralTraces               BehavioralTrace[]
+  aiCostTrackings                AICostTracking[]
+  deals                          Deal[]
+
+  @@map("workspaces")
+}
+
+model User {
+  id          String    @id @default(cuid())
+  email       String
+  name        String
+  role        String    @default("AGENT")
+  avatarUrl   String?
+  workspaceId String
+  isActive    Boolean   @default(true)
+  lastSeenAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sessions            Session[]
+  assignedLeads       Lead[]              @relation("AssignedAgent")
+  assignedDeals       Deal[]              @relation("DealAssignedAgent")
+  auditLogs           AuditLog[]          @relation("AuditUser")
+
+  @@unique([email, workspaceId])
+  @@index([workspaceId])
+  @@map("users")
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  token      String   @unique
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ============================================================
+// LEAD & CONTACT MANAGEMENT
+// ============================================================
+
+model Contact {
+  id          String   @id @default(cuid())
+  workspaceId String
+  phone       String?
+  email       String?
+  name        String
+  source      String   @default("MANUAL")
+  tags        String   @default("[]")
+  metadata    String   @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leads         Lead[]
+  conversations Conversation[]
+
+  @@index([workspaceId])
+  @@map("contacts")
+}
+
+model Lead {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  contactId       String
+  status          String    @default("NEW")
+  temperature     String    @default("COLD")
+  archetype       String    @default("CAUTIOUS")
+  score           Int       @default(0)
+  assignedAgentId String?
+  pipelineStage   String?
+  dealValue       Float     @default(0)
+  currency        String    @default("USD")
+  lostReason      String?
+  firstContactAt  DateTime  @default(now())
+  lastContactAt   DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact         Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  assignedAgent   User?           @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  leadTags        LeadTag[]
+  conversations   Conversation[]
+  cognitiveStates CognitiveState[]
+  stateTransitions StateTransition[]
+  dealValueHistories DealValueHistory[]
+  agentExecutions AgentExecution[]
+  followUpExecutions FollowUpExecution[]
+  toolActions     ToolAction[]
+  behavioralTraces BehavioralTrace[]
+  deals           Deal[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([contactId])
+  @@index([assignedAgentId])
+  @@map("leads")
+}
+
+model LeadTag {
+  id        String   @id @default(cuid())
+  leadId    String
+  tag       String
+  createdAt DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_tags")
+}
+
+// ============================================================
+// CONVERSATIONS & MESSAGING
+// ============================================================
+
+model Conversation {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  contactId      String
+  leadId         String?
+  channel        String    @default("WHATSAPP")
+  status         String    @default("ACTIVE")
+  currentStage   String    @default("EXPLORATION")
+  lastMessageAt  DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  workspace                  Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact                    Contact                    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  lead                       Lead?                      @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  messages                   Message[]
+  conversationStages         ConversationStage[]
+  cognitiveStates            CognitiveState[]
+  agentExecutions            AgentExecution[]
+  conversationAssignmentHistories ConversationAssignmentHistory[]
+  behavioralTraces           BehavioralTrace[]
+  toolActions                ToolAction[]
+  followUpExecutions         FollowUpExecution[]
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([leadId])
+  @@index([status])
+  @@map("conversations")
+}
+
+model Message {
+  id              String   @id @default(cuid())
+  conversationId  String
+  direction       String
+  content         String
+  senderType      String
+  senderId        String?
+  metadata        String   @default("{}")
+  status          String   @default("PENDING")
+  templateUsed    String?
+  createdAt       DateTime @default(now())
+
+  conversation        Conversation         @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  messageStatusHistories MessageStatusHistory[]
+
+  @@index([conversationId])
+  @@index([status])
+  @@map("messages")
+}
+
+model MessageStatusHistory {
+  id        String   @id @default(cuid())
+  messageId String
+  status    String
+  timestamp DateTime @default(now())
+  metadata  String   @default("{}")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("message_status_histories")
+}
+
+// ============================================================
+// MULTI-AGENT SYSTEM (7 CARNALES)
+// ============================================================
+
+model Agent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  type        String
+  name        String
+  description String   @default("")
+  config      String   @default("{}")
+  isActive    Boolean  @default(true)
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agentExecutions  AgentExecution[]
+  aiCostTrackings  AICostTracking[]
+  conversationAssignmentHistories ConversationAssignmentHistory[]
+
+  @@index([workspaceId])
+  @@index([type])
+  @@map("agents")
+}
+
+model AgentExecution {
+  id                 String   @id @default(cuid())
+  agentId            String
+  conversationId     String?
+  leadId             String?
+  inputSummary       String   @default("")
+  outputSummary      String   @default("")
+  decisionRationale  String   @default("")
+  policiesApplied    String   @default("[]")
+  cognitiveContext   String   @default("{}")
+  duration           Int      @default(0)
+  tokenUsage         String   @default("{}")
+  cost               Float    @default(0)
+  status             String   @default("SUCCESS")
+  createdAt          DateTime @default(now())
+
+  agent                 Agent                  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  conversation          Conversation?          @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  lead                  Lead?                  @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  behavioralValidations BehavioralValidation[]
+  responseEvaluations   ResponseEvaluation[]
+  hallucinationDetections HallucinationDetection[]
+  observabilityTraces   ObservabilityTrace[]
+  toolActions           ToolAction[]
+
+  @@index([agentId])
+  @@index([conversationId])
+  @@index([leadId])
+  @@index([status])
+  @@map("agent_executions")
+}
+
+// ============================================================
+// BEHAVIORAL EXECUTION LAYER
+// ============================================================
+
+model ConversationStage {
+  id             String   @id @default(cuid())
+  conversationId String
+  stage          String
+  confidence     Float    @default(0)
+  triggerReason  String   @default("")
+  detectedAt     DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("conversation_stages")
+}
+
+model CognitiveState {
+  id                 String   @id @default(cuid())
+  leadId             String
+  conversationId     String?
+  temperature        String   @default("COLD")
+  archetype          String   @default("CAUTIOUS")
+  intentScore        Float    @default(0)
+  churnRisk          Float    @default(0)
+  priority           Int      @default(5)
+  historicalContext  String   @default("{}")
+  updatedAt          DateTime @default(now())
+
+  lead         Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  conversation Conversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([conversationId])
+  @@map("cognitive_states")
+}
+
+model SalesPolicy {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String   @default("")
+  ruleType    String
+  config      String   @default("{}")
+  isActive    Boolean  @default(true)
+  priority    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([ruleType])
+  @@map("sales_policies")
+}
+
+model BehavioralValidation {
+  id            String   @id @default(cuid())
+  executionId   String
+  validatorType String
+  score         Float    @default(0)
+  passed        Boolean  @default(true)
+  details       String   @default("{}")
+  createdAt     DateTime @default(now())
+
+  execution AgentExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId])
+  @@map("behavioral_validations")
+}
+
+model ResponseEvaluation {
+  id                String   @id @default(cuid())
+  executionId       String
+  clarity           Float    @default(0)
+  empathy           Float    @default(0)
+  alignment         Float    @default(0)
+  pressure          Float    @default(0)
+  commercialQuality Float    @default(0)
+  overallScore      Float    @default(0)
+  feedback          String?
+  createdAt         DateTime @default(now())
+
+  execution AgentExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId])
+  @@map("response_evaluations")
+}
+
+// ============================================================
+// REPLAY FOUNDATION LAYER
+// ============================================================
+
+model ConversationAssignmentHistory {
+  id             String    @id @default(cuid())
+  conversationId String
+  agentType      String
+  agentId        String?
+  assignedAt     DateTime  @default(now())
+  unassignedAt   DateTime?
+  reason         String    @default("")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agent        Agent?      @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId])
+  @@index([agentId])
+  @@map("conversation_assignment_histories")
+}
+
+model StateTransition {
+  id        String   @id @default(cuid())
+  leadId    String
+  fromStage String
+  toStage   String
+  trigger   String   @default("")
+  context   String   @default("{}")
+  createdAt DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("state_transitions")
+}
+
+model DealValueHistory {
+  id            String   @id @default(cuid())
+  leadId        String
+  previousValue Float    @default(0)
+  newValue      Float    @default(0)
+  reason        String   @default("")
+  createdAt     DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("deal_value_histories")
+}
+
+// ============================================================
+// COGNITIVE OBSERVABILITY
+// ============================================================
+
+model ObservabilityTrace {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  traceId           String
+  spanId            String
+  parentSpanId      String?
+  agentExecutionId  String?
+  operationName     String
+  eventType         String
+  attributes        String   @default("{}")
+  duration          Int      @default(0)
+  status            String   @default("OK")
+  createdAt         DateTime @default(now())
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agentExecution AgentExecution? @relation(fields: [agentExecutionId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([traceId])
+  @@index([agentExecutionId])
+  @@map("observability_traces")
+}
+
+model BehavioralTrace {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  conversationId  String?
+  leadId          String?
+  stage           String?
+  archetype       String?
+  policiesApplied String   @default("[]")
+  violations      String   @default("[]")
+  responseScore   Float    @default(0)
+  cognitiveDrift  Float    @default(0)
+  metadata        String   @default("{}")
+  createdAt       DateTime @default(now())
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([conversationId])
+  @@index([leadId])
+  @@map("behavioral_traces")
+}
+
+model HallucinationDetection {
+  id                  String   @id @default(cuid())
+  executionId         String
+  detectionType       String
+  severity            String   @default("LOW")
+  details             String
+  suggestedCorrection String?
+  createdAt           DateTime @default(now())
+
+  execution AgentExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId])
+  @@map("hallucination_detections")
+}
+
+model AICostTracking {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  agentId       String?
+  model         String   @default("gpt-4o")
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  totalTokens   Int      @default(0)
+  cost          Float    @default(0)
+  currency      String   @default("USD")
+  operationType String   @default("chat")
+  createdAt     DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([agentId])
+  @@map("ai_cost_trackings")
+}
+
+// ============================================================
+// SECURITY & TRUST
+// ============================================================
+
+model TrustZone {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  name         String
+  description  String   @default("")
+  zoneType     String
+  allowedRoles String   @default("[]")
+  constraints  String   @default("{}")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("trust_zones")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String?
+  action      String
+  resource    String
+  resourceId  String?
+  details     String   @default("{}")
+  ipAddress   String?
+  userAgent   String?
+  severity    String   @default("INFO")
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation("AuditUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+model WebhookConfig {
+  id          String   @id @default(cuid())
+  workspaceId String
+  url         String
+  events      String   @default("[]")
+  secret      String
+  isActive    Boolean  @default(true)
+  retryCount  Int      @default(3)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  webhookDeliveries WebhookDelivery[]
+
+  @@index([workspaceId])
+  @@map("webhook_configs")
+}
+
+model WebhookDelivery {
+  id              String    @id @default(cuid())
+  webhookConfigId String
+  payload         String    @default("{}")
+  responseStatus  Int?
+  responseBody    String?
+  attempts        Int       @default(0)
+  deliveredAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  webhookConfig WebhookConfig @relation(fields: [webhookConfigId], references: [id], onDelete: Cascade)
+
+  @@index([webhookConfigId])
+  @@map("webhook_deliveries")
+}
+
+// ============================================================
+// PIPELINE & COMMERCIAL
+// ============================================================
+
+model Pipeline {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String   @default("")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  stages    PipelineStage[]
+  deals     Deal[]
+
+  @@index([workspaceId])
+  @@map("pipelines")
+}
+
+model PipelineStage {
+  id           String   @id @default(cuid())
+  pipelineId   String
+  name         String
+  order        Int
+  color        String   @default("#6b7280")
+  isDefault    Boolean  @default(false)
+  isWonStage   Boolean  @default(false)
+  isLostStage  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  deals    Deal[]
+
+  @@index([pipelineId])
+  @@map("pipeline_stages")
+}
+
+model Deal {
+  id                String    @id @default(cuid())
+  workspaceId       String
+  leadId            String
+  pipelineId        String
+  pipelineStageId   String
+  title             String
+  value             Float     @default(0)
+  currency          String    @default("USD")
+  probability       Float     @default(0.5)
+  expectedCloseDate DateTime?
+  assignedAgentId   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead           Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  pipeline       Pipeline       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  pipelineStage  PipelineStage  @relation(fields: [pipelineStageId], references: [id], onDelete: Cascade)
+  assignedAgent  User?          @relation("DealAssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([leadId])
+  @@index([pipelineId])
+  @@index([pipelineStageId])
+  @@map("deals")
+}
+
+// ============================================================
+// FOLLOW-UP & TOOL OS
+// ============================================================
+
+model FollowUpSequence {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  name             String
+  description      String   @default("")
+  triggerCondition String   @default("{}")
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  steps     FollowUpStep[]
+
+  @@index([workspaceId])
+  @@map("follow_up_sequences")
+}
+
+model FollowUpStep {
+  id              String   @id @default(cuid())
+  sequenceId      String
+  order           Int
+  delayMinutes    Int      @default(60)
+  messageTemplate String
+  agentType       String   @default("FOLLOWUP")
+  conditions      String   @default("{}")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  sequence   FollowUpSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  executions FollowUpExecution[]
+
+  @@index([sequenceId])
+  @@map("follow_up_steps")
+}
+
+model FollowUpExecution {
+  id              String    @id @default(cuid())
+  stepId          String
+  leadId          String
+  conversationId  String?
+  status          String    @default("PENDING")
+  executedAt      DateTime?
+  result          String?
+  createdAt       DateTime  @default(now())
+
+  step         FollowUpStep  @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  lead         Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([stepId])
+  @@index([leadId])
+  @@index([conversationId])
+  @@map("follow_up_executions")
+}
+
+model ToolAction {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  conversationId   String?
+  leadId           String?
+  agentExecutionId String?
+  toolType         String
+  parameters       String    @default("{}")
+  result           String    @default("{}")
+  status           String    @default("PENDING")
+  executedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation   Conversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  lead           Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  agentExecution AgentExecution? @relation(fields: [agentExecutionId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([conversationId])
+  @@index([leadId])
+  @@index([agentExecutionId])
+  @@index([status])
+  @@map("tool_actions")
+}
