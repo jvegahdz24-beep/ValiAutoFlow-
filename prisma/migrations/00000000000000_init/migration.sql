@@ -1,0 +1,8 @@
+-- ValiAutoFlow Initial Migration
+-- This is a placeholder. To generate the real SQL migration:
+-- 1. Set DATABASE_URL in .env.local pointing to your Supabase PostgreSQL
+-- 2. Run: npx prisma migrate dev --name init
+-- 3. This will introspect the schema and generate the actual SQL
+--
+-- For quick setup on a fresh database:
+-- npx prisma db push
