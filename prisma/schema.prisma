@@ -41,6 +41,9 @@ model Workspace {
   segments                      Segment[]
   calendarEvents                CalendarEvent[]
   notifications                 Notification[]
+  telegramBotConfigs            TelegramBotConfig[]
+  telegramBotSessions           TelegramBotSession[]
+  telegramBotCommands           TelegramBotCommand[]
 
   @@map("workspaces")
 }
@@ -874,4 +877,67 @@ model Notification {
   @@index([workspaceId])
   @@index([read])
   @@map("notifications")
+}
+
+// ============================================================
+// TELEGRAM BOT (Human-in-the-loop control)
+// ============================================================
+
+model TelegramBotConfig {
+  id              String   @id @default(cuid())
+  workspaceId     String   @unique
+  botToken        String
+  botUsername     String   @default("")
+  allowedChatIds  String   @default("[]") // JSON: array of Telegram chat IDs authorized
+  isActive        Boolean  @default(false)
+  webhookUrl      String?
+  lastSyncAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("telegram_bot_configs")
+}
+
+model TelegramBotSession {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  chatId          String    // Telegram chat ID
+  userId          String?   // Link to User if authenticated
+  state           String    @default("idle") // idle, viewing_lead, responding, commanding, taken_over
+  currentLeadId   String?
+  currentConversationId String?
+  lastCommand     String?
+  lastCommandAt   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([chatId])
+  @@map("telegram_bot_sessions")
+}
+
+model TelegramBotCommand {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  chatId          String
+  command         String   // /ver, /responder, /tomar_mando, /campaña, /leads, /stats, /help, /start
+  arguments       String   @default("") // arguments after the command
+  response        String?  // bot response message
+  leadId          String?
+  conversationId  String?
+  status          String   @default("processed") // received, processed, failed
+  createdAt       DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([chatId])
+  @@index([command])
+  @@index([createdAt])
+  @@map("telegram_bot_commands")
 }

@@ -23,9 +23,10 @@ import {
   ChevronRight,
   Settings,
   Megaphone,
+  Bot,
 } from 'lucide-react'
 
-export type ViewType = 'dashboard' | 'conversations' | 'leads' | 'pipeline' | 'agents' | 'observability' | 'followups' | 'policies' | 'audit' | 'config' | 'marketing'
+export type ViewType = 'dashboard' | 'conversations' | 'leads' | 'pipeline' | 'agents' | 'observability' | 'followups' | 'policies' | 'audit' | 'config' | 'marketing' | 'telegram'
 
 interface NavItem {
   id: ViewType
@@ -41,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
   { id: 'agents', label: 'Agents', icon: Brain, badge: '7 Carnales' },
   { id: 'marketing', label: 'Marketing', icon: Megaphone },
+  { id: 'telegram', label: 'Telegram Bot', icon: Bot, badge: 'Nuevo' },
   { id: 'followups', label: 'Follow-ups', icon: Clock },
   { id: 'policies', label: 'Policies', icon: Shield },
   { id: 'observability', label: 'Observability', icon: Eye },
