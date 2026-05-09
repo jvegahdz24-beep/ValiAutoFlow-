@@ -9,12 +9,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'workspaceId required' }, { status: 400 })
   }
 
-  const followups = await db.followup.findMany({
+  const followups = await db.followUpSequence.findMany({
     where: { workspaceId },
     include: {
-      executions: {
-        orderBy: { createdAt: 'desc' },
-        take: 20,
+      steps: {
+        include: {
+          executions: {
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          },
+        },
       },
     },
     orderBy: { createdAt: 'desc' },

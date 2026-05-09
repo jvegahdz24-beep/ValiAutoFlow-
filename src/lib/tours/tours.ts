@@ -1,4 +1,4 @@
-import type { TourDefinition } from './types'
+import type { TourDefinition, ViewType } from './types'
 
 /**
  * All available guided tours.

@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'workspaceId required' }, { status: 400 })
   }
 
-  const traces = await db.trace.findMany({
+  const traces = await db.observabilityTrace.findMany({
     where: { workspaceId },
     orderBy: { createdAt: 'desc' },
     take: 100,

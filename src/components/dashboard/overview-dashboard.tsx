@@ -139,8 +139,8 @@ export function OverviewDashboard({ workspaceId }: { workspaceId: string }) {
             <CardContent>
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
-                  <Pie data={d.leadSourceDistribution || d.leadSources || []} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="count" nameKey="source">
-                    {(d.leadSourceDistribution || d.leadSources || []).map((_entry: unknown, index: number) => (
+                  <Pie data={d.leadSourceDistribution || []} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value" nameKey="name">
+                    {(d.leadSourceDistribution || []).map((_entry: unknown, index: number) => (
                       <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                     ))}
                   </Pie>
@@ -148,11 +148,11 @@ export function OverviewDashboard({ workspaceId }: { workspaceId: string }) {
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex flex-wrap justify-center gap-3 mt-2">
-                {(d.leadSourceDistribution || d.leadSources || []).map((item: { source: string; count: number }, i: number) => (
-                  <div key={item.source} className="flex items-center gap-1.5 text-xs">
+                {(d.leadSourceDistribution || []).map((item: { name: string; value: number }, i: number) => (
+                  <div key={item.name} className="flex items-center gap-1.5 text-xs">
                     <div className="h-2.5 w-2.5 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                    <span className="text-muted-foreground">{item.source}</span>
-                    <span className="font-medium">{item.count}</span>
+                    <span className="text-muted-foreground">{item.name}</span>
+                    <span className="font-medium">{item.value}</span>
                   </div>
                 ))}
               </div>
@@ -170,12 +170,12 @@ export function OverviewDashboard({ workspaceId }: { workspaceId: string }) {
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={d.temperatureDistribution || []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="temperature" tick={{ fill: '#9CA3AF', fontSize: 12 }} />
+                  <XAxis dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 12 }} />
                   <YAxis tick={{ fill: '#9CA3AF', fontSize: 12 }} />
                   <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }} labelStyle={{ color: '#fff' }} />
                   <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                    {(d.temperatureDistribution || []).map((entry: { temperature: string }) => (
-                      <Cell key={entry.temperature} fill={TEMP_COLORS[entry.temperature] || '#6B7280'} />
+                    {(d.temperatureDistribution || []).map((entry: { name: string }) => (
+                      <Cell key={entry.name} fill={TEMP_COLORS[entry.name] || '#6B7280'} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -195,11 +195,11 @@ export function OverviewDashboard({ workspaceId }: { workspaceId: string }) {
                 <BarChart data={d.stageDistribution || []} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
                   <XAxis type="number" tick={{ fill: '#9CA3AF', fontSize: 12 }} />
-                  <YAxis dataKey="stage" type="category" tick={{ fill: '#9CA3AF', fontSize: 11 }} width={80} />
+                  <YAxis dataKey="name" type="category" tick={{ fill: '#9CA3AF', fontSize: 11 }} width={80} />
                   <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }} labelStyle={{ color: '#fff' }} />
                   <Bar dataKey="count" radius={[0, 6, 6, 0]}>
-                    {(d.stageDistribution || []).map((entry: { stage: string }) => (
-                      <Cell key={entry.stage} fill={STAGE_COLORS[entry.stage] || '#6B7280'} />
+                    {(d.stageDistribution || []).map((entry: { name: string }) => (
+                      <Cell key={entry.name} fill={STAGE_COLORS[entry.name] || '#6B7280'} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -220,7 +220,7 @@ export function OverviewDashboard({ workspaceId }: { workspaceId: string }) {
             <CardContent className="p-0">
               <ScrollArea className="h-[320px]">
                 <div className="space-y-1 px-6 pb-4">
-                  {conversations?.slice(0, 8).map((conv: { id: string; channel: string; lead: { name: string }; stage: string; temperature: string; lastMessage: string; lastMessageAt: string }) => (
+                  {conversations?.slice(0, 8).map((conv: { id: string; channel: string; lead: { name: string }; stage: string; temperature: string; lastMessage: string | null; lastMessageAt: string | null }) => (
                     <div
                       key={conv.id}
                       className="flex items-start gap-3 rounded-lg p-3 hover:bg-muted/50 transition-colors cursor-pointer"

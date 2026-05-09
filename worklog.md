@@ -102,3 +102,42 @@ Stage Summary:
 - Security headers configured
 - Project ready for git push → Supabase → Vercel
 - Prisma schema supports both SQLite (dev) and PostgreSQL (prod) with provider switch
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Final production hardening — PostgreSQL migration, TypeScript fixes, deployment prep
+
+Work Log:
+- Created .env.example with all 18 environment variables documented (DATABASE_URL, DIRECT_URL, NEXTAUTH_SECRET, NEXTAUTH_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, WHATSAPP_*, TELEGRAM_BOT_TOKEN, OPENAI_API_KEY, GLM_API_KEY, REDIS_URL, GOOGLE_CALENDAR_*)
+- Fixed .gitignore: Added `!.env.example` so the template is committed to git
+- Changed Prisma provider from "sqlite" to "postgresql" for production (Supabase)
+- Updated .env to include DIRECT_URL for Prisma migrations
+- Improved src/lib/db.ts: Conditional logging (query logs only in development, error-only in production)
+- Created src/lib/demo/seed-standalone.ts: Standalone seed script referenced in package.json `db:seed:demo`
+- Fixed bug in seed.ts: `db.contact.findThird()` → `db.contact.findFirst({ skip: 2 })`
+- Fixed prompt-compiler.ts: `consultiveNotAggressive` → `consultativeNotAggressive` (typo)
+- Fixed observability-engine.ts: `driftDetected` → `detected` to match PipelineResult type
+- Fixed tours/types.ts: Added `export type { ViewType }` re-export for tours.ts
+- Fixed tours/tours.ts: Added `ViewType` import from types
+- Fixed whatsapp/webhook.ts: Proper type casting for `e.error_data?.message`
+- Fixed overview-dashboard.tsx: Updated all chart data accessors to match DashboardData type (name/value instead of source/count, temperature instead of name)
+- Expanded use-dashboard.ts DashboardData type with 6 missing properties (lostLeads, estimatedLoss, appointmentsScheduled, campaignsActive, totalCampaignsSent, unreadNotifications)
+- Fixed marketing-view.tsx: SegmentQuery state type to match SegmentBuilder interface
+- Fixed workspaces/[workspaceId]/route.ts: Removed `users: true` from _count (not a Workspace relation)
+- Fixed whatsapp/webhook/route.ts: Type-safe entry/changes extraction
+- Fixed 13 API routes with incorrect Prisma model names (agentExecution, conversationAssignmentHistories, aICostTracking, behavioralTrace, hallucinationDetection, observabilityTrace, salesPolicy, followUpSequence, cognitiveState)
+- Fixed auth/[...nextauth]/route.ts: Added explicit types for all implicit `any` parameters
+- Fixed seed/route.ts: Readonly array spread for mutable array compatibility
+- Fixed whatsapp webhook handler: Removed `& Record<string, unknown>` type intersections
+- Verified: tsc --noEmit → 0 errors in src/, npm run build → 0 errors, npm run lint → 0 errors
+
+Stage Summary:
+- Build: 0 errors
+- Lint: 0 errors
+- TypeScript: 0 errors in src/ (strict mode)
+- 49 API routes registered
+- Prisma schema: PostgreSQL provider for production
+- .env.example: Complete with all variables
+- All deployment files ready (vercel.json, postinstall, .gitignore)
+- Project is PRODUCTION READY for Supabase + Vercel

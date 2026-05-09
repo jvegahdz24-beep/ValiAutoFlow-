@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
 // ============================================================
 
 async function handleIncomingMessage(
-  parsed: ReturnType<typeof parseIncomingMessage> & Record<string, unknown>,
+  parsed: ReturnType<typeof parseIncomingMessage>,
   rawBody: Record<string, unknown>
 ): Promise<void> {
   if (!parsed) return
@@ -117,9 +117,10 @@ async function handleIncomingMessage(
     // STEP 2: Find the workspace by matching WhatsAppConfig
     // ──────────────────────────────────────────────────────────
     // Extract the phone_number_id from the webhook payload metadata
-    const entries = rawBody.entry as Array<Record<string, unknown>>[]
-    const changes = entries?.[0]?.changes as Array<Record<string, unknown>>[]
-    const value = changes?.[0]?.value as Record<string, unknown>
+    const entries = (rawBody.entry ?? []) as Array<Record<string, unknown>>
+    const firstEntry = entries[0] as Record<string, unknown> | undefined
+    const changes = (firstEntry?.changes ?? []) as Array<Record<string, unknown>>
+    const value = (changes[0]?.value ?? {}) as Record<string, unknown>
     const metadata = value?.metadata as Record<string, unknown> | undefined
     const phoneNumberId = (metadata?.phone_number_id as string) || ''
 
@@ -272,7 +273,7 @@ async function handleIncomingMessage(
 // ============================================================
 
 async function handleStatusUpdate(
-  parsed: ReturnType<typeof parseStatusUpdate> & Record<string, unknown>
+  parsed: ReturnType<typeof parseStatusUpdate>
 ): Promise<void> {
   if (!parsed) return
 

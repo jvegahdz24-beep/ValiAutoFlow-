@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'workspaceId required' }, { status: 400 })
   }
 
-  const costs = await db.cost.findMany({
+  const costs = await db.aICostTracking.findMany({
     where: { workspaceId },
     orderBy: { createdAt: 'desc' },
   })

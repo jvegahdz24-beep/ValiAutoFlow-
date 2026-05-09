@@ -29,7 +29,7 @@ export async function GET(request: Request) {
   const leads = await db.lead.findMany({
     where,
     include: {
-      leadMemories: true,
+      cognitiveStates: true,
       conversations: {
         take: 1,
         orderBy: { lastMessageAt: 'desc' },

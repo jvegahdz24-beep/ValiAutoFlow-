@@ -7,11 +7,12 @@ export async function GET(
 ) {
   const { leadId } = await params
 
-  const memories = await db.leadMemory.findMany({
+  const states = await db.cognitiveState.findMany({
     where: { leadId },
+    orderBy: { updatedAt: 'desc' },
   })
 
-  if (memories.length === 0) {
+  if (states.length === 0) {
     return NextResponse.json({
       conversational: '',
       commercial: '',
@@ -19,10 +20,11 @@ export async function GET(
     })
   }
 
-  const latest = memories[memories.length - 1]
+  const latest = states[0]
+  const context = JSON.parse(latest.historicalContext || '{}') as Record<string, string>
   return NextResponse.json({
-    conversational: latest.conversational,
-    commercial: latest.commercial,
-    operational: latest.operational,
+    conversational: context.conversational ?? '',
+    commercial: context.commercial ?? '',
+    operational: context.operational ?? '',
   })
 }

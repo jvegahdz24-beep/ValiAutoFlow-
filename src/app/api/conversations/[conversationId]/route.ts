@@ -33,7 +33,7 @@ export async function GET(
           orderBy: { updatedAt: 'desc' },
           take: 5,
         },
-        assignmentHistories: {
+        conversationAssignmentHistories: {
           orderBy: { assignedAt: 'desc' },
           take: 10,
         },

@@ -79,7 +79,7 @@ export function MarketingView({ workspaceId }: { workspaceId: string }) {
   const queryClient = useQueryClient()
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
-  const [segmentQuery, setSegmentQuery] = useState<Record<string, unknown>>({})
+  const [segmentQuery, setSegmentQuery] = useState<{ tags?: string[]; minScore?: number; status?: string; temperature?: string }>({})
 
   const { data: campaignsData, isLoading } = useQuery({
     queryKey: ['campaigns', workspaceId],

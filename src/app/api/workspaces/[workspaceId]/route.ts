@@ -14,7 +14,6 @@ export async function GET(
       include: {
         _count: {
           select: {
-            users: true,
             contacts: true,
             leads: true,
             conversations: true,

@@ -18,7 +18,7 @@ const DEFAULT_JHON: JHONConfig = {
   neverCloseWithoutLossAwareness: true,
   oneIdeaPerMessage: true,
   shortDirectedConversation: true,
-  consultiveNotAggressive: true,
+  consultativeNotAggressive: true,
   showCostOfInaction: true,
 };
 

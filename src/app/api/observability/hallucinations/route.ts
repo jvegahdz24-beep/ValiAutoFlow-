@@ -9,8 +9,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'workspaceId required' }, { status: 400 })
   }
 
-  const hallucinations = await db.hallucination.findMany({
-    where: { workspaceId },
+  const hallucinations = await db.hallucinationDetection.findMany({
+    where: {
+      execution: {
+        agent: {
+          workspaceId,
+        },
+      },
+    },
     orderBy: { createdAt: 'desc' },
   })
 

@@ -9,6 +9,12 @@ interface DashboardData {
     conversionRate: number
     revenue: number
     pipelineValue: number
+    lostLeads: number
+    estimatedLoss: number
+    appointmentsScheduled: number
+    campaignsActive: number
+    totalCampaignsSent: number
+    unreadNotifications: number
     leadSourceDistribution: { name: string; value: number }[]
     stageDistribution: { name: string; value: number }[]
     temperatureDistribution: { name: string; value: number }[]

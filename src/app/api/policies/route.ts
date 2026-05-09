@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'workspaceId required' }, { status: 400 })
   }
 
-  const policies = await db.policy.findMany({
+  const policies = await db.salesPolicy.findMany({
     where: { workspaceId },
     orderBy: { createdAt: 'desc' },
   })

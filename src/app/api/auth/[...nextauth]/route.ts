@@ -10,7 +10,7 @@ import { getUserFirstWorkspace, createDefaultWorkspace } from "@/lib/auth"
  */
 function PrismaAdapter(): import("next-auth/adapters").Adapter {
   return {
-    async createUser(data) {
+    async createUser(data: { name?: string | null; email?: string | null; image?: string | null; emailVerified?: Date | null }) {
       const user = await db.user.create({
         data: {
           name: data.name ?? "",
@@ -36,7 +36,7 @@ function PrismaAdapter(): import("next-auth/adapters").Adapter {
       })
       return account?.user as any
     },
-    async updateUser(data) {
+    async updateUser(data: { id?: string; name?: string | null; email?: string | null; image?: string | null; emailVerified?: Date | null }) {
       const user = await db.user.update({
         where: { id: (data as any).id },
         data: data as any,
@@ -46,7 +46,7 @@ function PrismaAdapter(): import("next-auth/adapters").Adapter {
     async deleteUser(id) {
       await db.user.delete({ where: { id } })
     },
-    async linkAccount(data) {
+    async linkAccount(data: { userId: string; type: string; provider: string; providerAccountId: string; refresh_token?: string | null; access_token?: string | null; expires_at?: number | null; token_type?: string | null; scope?: string | null; id_token?: string | null; session_state?: string | null; oauth_token?: string | null; oauth_token_secret?: string | null }) {
       await db.account.create({
         data: {
           userId: data.userId,
@@ -65,12 +65,12 @@ function PrismaAdapter(): import("next-auth/adapters").Adapter {
         },
       })
     },
-    async unlinkAccount({ provider, providerAccountId }) {
+    async unlinkAccount({ provider, providerAccountId }: { provider: string; providerAccountId: string }) {
       await db.account.delete({
         where: { provider_providerAccountId: { provider, providerAccountId } },
       })
     },
-    async createSession(data) {
+    async createSession(data: { sessionToken: string; userId: string; expires: Date }) {
       const session = await db.session.create({
         data: {
           sessionToken: data.sessionToken,
@@ -80,23 +80,23 @@ function PrismaAdapter(): import("next-auth/adapters").Adapter {
       })
       return session as any
     },
-    async getSession(sessionToken) {
+    async getSession(sessionToken: string) {
       const session = await db.session.findUnique({
         where: { sessionToken },
       })
       return session as any
     },
-    async updateSession(data) {
+    async updateSession(data: { sessionToken?: string; [key: string]: unknown }) {
       const session = await db.session.update({
         where: { sessionToken: (data as any).sessionToken },
         data: data as any,
       })
       return session as any
     },
-    async deleteSession(sessionToken) {
+    async deleteSession(sessionToken: string) {
       await db.session.delete({ where: { sessionToken } })
     },
-    async createVerificationToken(data) {
+    async createVerificationToken(data: { identifier: string; token: string; expires: Date }) {
       const token = await db.verificationToken.create({
         data: {
           identifier: data.identifier,
@@ -116,7 +116,7 @@ function PrismaAdapter(): import("next-auth/adapters").Adapter {
         return null
       }
     },
-  }
+  } as import("next-auth/adapters").Adapter
 }
 
 export const authOptions: NextAuthOptions = {

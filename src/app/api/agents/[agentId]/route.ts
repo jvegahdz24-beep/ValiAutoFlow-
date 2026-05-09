@@ -12,7 +12,7 @@ export async function GET(
     const agent = await db.agent.findUnique({
       where: { id: agentId },
       include: {
-        executions: {
+        agentExecutions: {
           orderBy: { createdAt: 'desc' },
           take: 20,
           include: {
@@ -35,7 +35,7 @@ export async function GET(
         },
         _count: {
           select: {
-            executions: true,
+            agentExecutions: true,
             aiCostTrackings: true,
           },
         },

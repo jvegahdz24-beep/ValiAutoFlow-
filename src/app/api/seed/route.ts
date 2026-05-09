@@ -158,7 +158,7 @@ export async function POST() {
           leadId: lead.id,
           channel: pick(CHANNELS),
           status: pickM(['ACTIVE', 'ACTIVE', 'ACTIVE', 'PAUSED', 'CLOSED']),
-          currentStage: pickM(STAGES),
+          currentStage: pickM([...STAGES]),
           lastMessageAt: new Date(Date.now() - rand(0, 3) * 86400000),
         },
       })
@@ -268,7 +268,7 @@ export async function POST() {
           workspaceId: workspace.id,
           name: seqNames[i],
           description: 'Secuencia automatizada de seguimiento',
-          triggerCondition: JSON.stringify({ stage: pickM(STAGES) }),
+          triggerCondition: JSON.stringify({ stage: pickM([...STAGES]) }),
         },
       })
 
@@ -319,7 +319,7 @@ export async function POST() {
           agentId: agent.id,
           inputSummary: `Lead message processing #${i + 1}`,
           outputSummary: `Response generated with ${pickM(CARNALS).type} engine`,
-          decisionRationale: `Stage: ${pickM(STAGES)}, Temperature: ${pick(TEMPERATURES)}`,
+          decisionRationale: `Stage: ${pickM([...STAGES])}, Temperature: ${pick(TEMPERATURES)}`,
           policiesApplied: JSON.stringify([pickM(['NO_PRICE_EARLY', 'MAX_QUESTIONS', 'ONE_ACTION_NEXT'])]),
           cognitiveContext: JSON.stringify({ intentScore: Math.random(), churnRisk: Math.random() * 0.5 }),
           duration: rand(50, 2000),

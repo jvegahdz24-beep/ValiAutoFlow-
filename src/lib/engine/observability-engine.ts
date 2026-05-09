@@ -18,9 +18,9 @@ export class ObservabilityEngine {
     previousState: CognitiveStateInput | null,
     currentState: CognitiveStateInput,
     stageTransition: { from: string; to: string } | null
-  ): { driftDetected: boolean; magnitude: number; details: string } {
+  ): { detected: boolean; magnitude: number; details: string } {
     if (!previousState) {
-      return { driftDetected: false, magnitude: 0, details: 'No previous state for comparison' };
+      return { detected: false, magnitude: 0, details: 'No previous state for comparison' };
     }
 
     const drifts: string[] = [];
@@ -65,9 +65,9 @@ export class ObservabilityEngine {
       }
     }
 
-    const driftDetected = totalMagnitude > 0.3;
+    const detected = totalMagnitude > 0.3;
     return {
-      driftDetected,
+      detected,
       magnitude: Math.min(totalMagnitude, 1),
       details: drifts.length > 0 ? drifts.join('. ') : 'No significant drift detected',
     };

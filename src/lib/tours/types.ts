@@ -1,5 +1,7 @@
 import type { ViewType } from '@/components/dashboard/dashboard-shell'
 
+export type { ViewType }
+
 /**
  * Tour step definition.
  * Each step highlights a DOM element and shows a tooltip.

@@ -393,7 +393,7 @@ export function parseStatusUpdate(
       parsed.errors = errors.map(e => ({
         code: (e.code as number) || 0,
         title: (e.title as string) || '',
-        message: (e.message as string) || (e.error_data?.message as string) || '',
+        message: (e.message as string) || ((e.error_data as Record<string, unknown> | undefined)?.message as string) || '',
       }))
     }
 

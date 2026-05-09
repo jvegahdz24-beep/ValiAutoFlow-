@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'workspaceId required' }, { status: 400 })
   }
 
-  const driftEvents = await db.driftEvent.findMany({
+  const driftEvents = await db.behavioralTrace.findMany({
     where: { workspaceId },
     orderBy: { createdAt: 'desc' },
   })

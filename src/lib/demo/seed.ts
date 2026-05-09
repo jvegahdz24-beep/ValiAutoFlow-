@@ -486,7 +486,7 @@ export async function seedDemoData(workspaceId: string) {
 
   if (existingEvents.length === 0) {
     const firstContact = await db.contact.findFirst({ where: { workspaceId } })
-    const thirdContact = await db.contact.findThird({ where: { workspaceId } })
+    const thirdContact = await db.contact.findFirst({ where: { workspaceId }, skip: 2 })
 
     const eventDefs = [
       {
