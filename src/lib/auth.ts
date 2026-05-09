@@ -24,6 +24,62 @@ export async function requireAuth(): Promise<Session> {
 }
 
 /**
+ * Require authentication AND workspace membership.
+ * Verifies that the authenticated user belongs to the requested workspace.
+ * Returns { session, workspaceId } if authorized, throws otherwise.
+ *
+ * This is the CRITICAL security gate for all workspace-scoped API routes.
+ * Without this check, a user from Workspace A could access Workspace B's data.
+ */
+export async function requireWorkspaceAccess(
+  requestedWorkspaceId: string
+): Promise<{ session: Session; workspaceId: string; role: string }> {
+  const session = await requireAuth()
+  const userId = session.user.id
+
+  // Check if user is a member of the requested workspace
+  const membership = await db.workspaceMember.findUnique({
+    where: {
+      userId_workspaceId: {
+        userId,
+        workspaceId: requestedWorkspaceId,
+      },
+    },
+    select: {
+      role: true,
+      isActive: true,
+    },
+  })
+
+  if (!membership || !membership.isActive) {
+    throw new Error("You do not have access to this workspace")
+  }
+
+  return {
+    session,
+    workspaceId: requestedWorkspaceId,
+    role: membership.role,
+  }
+}
+
+/**
+ * Check if a user has a specific role or higher in a workspace.
+ * Role hierarchy: OWNER > ADMIN > AGENT > VIEWER
+ */
+const ROLE_HIERARCHY: Record<string, number> = {
+  OWNER: 4,
+  ADMIN: 3,
+  AGENT: 2,
+  VIEWER: 1,
+}
+
+export function hasMinimumRole(userRole: string, requiredRole: string): boolean {
+  const userLevel = ROLE_HIERARCHY[userRole] ?? 0
+  const requiredLevel = ROLE_HIERARCHY[requiredRole] ?? 0
+  return userLevel >= requiredLevel
+}
+
+/**
  * Get all workspaces for a user
  */
 export async function getUserWorkspaces(userId: string) {

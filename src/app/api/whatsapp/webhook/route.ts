@@ -97,8 +97,12 @@ export async function POST(request: NextRequest) {
         console.warn('[WhatsApp Webhook] POST — Invalid HMAC signature. Possible spoofed payload.')
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
       }
+    } else if (process.env.NODE_ENV === 'production') {
+      // PRODUCTION: Fail closed if no APP_SECRET configured
+      console.error('[WhatsApp Webhook] POST — CRITICAL: WHATSAPP_APP_SECRET not set in production. Rejecting all webhook calls.')
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     } else {
-      // No APP_SECRET configured — log warning but allow (for dev/testing)
+      // Development only: log warning but allow
       console.warn('[WhatsApp Webhook] POST — WHATSAPP_APP_SECRET not set. HMAC verification skipped. SET IT IN PRODUCTION!')
     }
 

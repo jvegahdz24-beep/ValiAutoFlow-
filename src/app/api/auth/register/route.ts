@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { createDefaultWorkspace } from "@/lib/auth"
+import { hashPassword } from "@/app/api/auth/[...nextauth]/route"
 import { checkRateLimit, getClientIdentifier } from "@/lib/security"
 
 export async function POST(request: NextRequest) {
@@ -44,12 +45,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create user with password (in production, hash with bcrypt)
+    // Hash password with bcrypt before storing
+    const hashedPassword = await hashPassword(password)
     const user = await db.user.create({
       data: {
         name,
         email,
-        password, // In production: await bcrypt.hash(password, 12)
+        password: hashedPassword,
         role: "AGENT",
         isActive: true,
       },

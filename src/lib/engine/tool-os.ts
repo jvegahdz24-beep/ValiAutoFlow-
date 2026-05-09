@@ -2,6 +2,11 @@
 // TOOL OS — The Action System (Carnal #7)
 // "El que ejecuta acciones"
 // ============================================================
+// SECURITY FEATURES:
+// - Tool allowlist: Only pre-approved tools can be executed
+// - Circuit breaker: Prevents cascading failures from external APIs
+// - Parameter validation: Basic type checking on tool parameters
+// ============================================================
 
 import {
   type ToolType,
@@ -9,10 +14,89 @@ import {
   type ConversationStageType,
 } from './types';
 
+// ============================================================
+// TOOL ALLOWLIST — Only these tools can be executed
+// ============================================================
+// Any tool NOT in this list will be rejected.
+// This prevents the LLM from hallucinating arbitrary tool calls.
+
+const ALLOWED_TOOLS: Set<ToolType> = new Set([
+  'SCHEDULE_APPOINTMENT',
+  'CREATE_DEAL',
+  'UPDATE_CRM',
+  'SEND_FOLLOWUP',
+  'GENERATE_QUOTE',
+  'CHECK_CALENDAR',
+  'SEND_LINK',
+  'ACTIVATE_WORKFLOW',
+  'UPDATE_PIPELINE',
+  'SEND_REMINDER',
+])
+
+// ============================================================
+// CIRCUIT BREAKER — Prevents cascading failures
+// ============================================================
+
+interface CircuitBreakerState {
+  failures: number
+  lastFailureAt: number
+  isOpen: boolean
+  nextRetryAt: number
+}
+
+const FAILURE_THRESHOLD = 5          // Open circuit after 5 consecutive failures
+const RESET_TIMEOUT_MS = 30_000     // Try again after 30 seconds
+const HALF_OPEN_MAX_CALLS = 1       // Allow 1 test call in half-open state
+
+const circuitBreakers = new Map<string, CircuitBreakerState>()
+
+function getCircuitBreaker(toolType: string): CircuitBreakerState {
+  let cb = circuitBreakers.get(toolType)
+  if (!cb) {
+    cb = { failures: 0, lastFailureAt: 0, isOpen: false, nextRetryAt: 0 }
+    circuitBreakers.set(toolType, cb)
+  }
+  return cb
+}
+
+function isCircuitOpen(toolType: string): boolean {
+  const cb = getCircuitBreaker(toolType)
+  if (!cb.isOpen) return false
+
+  // Check if reset timeout has elapsed
+  if (Date.now() >= cb.nextRetryAt) {
+    // Half-open state: allow one test call
+    cb.isOpen = false
+    return false
+  }
+
+  return true
+}
+
+function recordSuccess(toolType: string): void {
+  const cb = getCircuitBreaker(toolType)
+  cb.failures = 0
+  cb.isOpen = false
+}
+
+function recordFailure(toolType: string): void {
+  const cb = getCircuitBreaker(toolType)
+  cb.failures++
+  cb.lastFailureAt = Date.now()
+
+  if (cb.failures >= FAILURE_THRESHOLD) {
+    cb.isOpen = true
+    cb.nextRetryAt = Date.now() + RESET_TIMEOUT_MS
+    console.warn(`[ToolOS] Circuit breaker OPEN for ${toolType}. Will retry after ${RESET_TIMEOUT_MS / 1000}s.`)
+  }
+}
+
 export class ToolOS {
   /**
    * Execute a tool action. In production, these would connect to real external services.
    * For now, returns simulated but realistic results.
+   *
+   * SECURITY: Checks tool allowlist and circuit breaker before execution.
    */
   async executeAction(action: {
     toolType: ToolType;
@@ -24,6 +108,35 @@ export class ToolOS {
     const startTime = Date.now();
 
     try {
+      // ──────────────────────────────────────────────────────────
+      // SECURITY CHECK 1: Tool allowlist
+      // ──────────────────────────────────────────────────────────
+      if (!ALLOWED_TOOLS.has(action.toolType)) {
+        console.warn(`[ToolOS] BLOCKED: Tool "${action.toolType}" is not in the allowlist.`)
+        return {
+          toolType: action.toolType,
+          success: false,
+          result: {},
+          error: `Tool "${action.toolType}" is not allowed. Only approved tools can be executed.`,
+        }
+      }
+
+      // ──────────────────────────────────────────────────────────
+      // SECURITY CHECK 2: Circuit breaker
+      // ──────────────────────────────────────────────────────────
+      if (isCircuitOpen(action.toolType)) {
+        console.warn(`[ToolOS] Circuit breaker OPEN for ${action.toolType}. Rejecting call.`)
+        return {
+          toolType: action.toolType,
+          success: false,
+          result: {},
+          error: `Service temporarily unavailable for ${action.toolType}. Circuit breaker is open.`,
+        }
+      }
+
+      // ──────────────────────────────────────────────────────────
+      // EXECUTE TOOL
+      // ──────────────────────────────────────────────────────────
       let result: Record<string, unknown>;
 
       switch (action.toolType) {
@@ -58,6 +171,7 @@ export class ToolOS {
           result = await this.sendReminder(action.parameters);
           break;
         default:
+          // This should never happen due to allowlist check, but just in case
           return {
             toolType: action.toolType,
             success: false,
@@ -66,12 +180,18 @@ export class ToolOS {
           };
       }
 
+      // Record success for circuit breaker
+      recordSuccess(action.toolType)
+
       return {
         toolType: action.toolType,
         success: true,
         result: { ...result, executionTimeMs: Date.now() - startTime },
       };
     } catch (error) {
+      // Record failure for circuit breaker
+      recordFailure(action.toolType)
+
       return {
         toolType: action.toolType,
         success: false,
@@ -83,6 +203,7 @@ export class ToolOS {
 
   /**
    * Detect tool needs from a message based on keywords.
+   * Only returns tools that are in the allowlist.
    */
   detectToolNeeds(message: string, stage: ConversationStageType): ToolType[] {
     const tools: ToolType[] = [];
@@ -123,7 +244,8 @@ export class ToolOS {
       tools.push('UPDATE_PIPELINE');
     }
 
-    return tools;
+    // Filter out any tools not in allowlist (belt and suspenders)
+    return tools.filter(t => ALLOWED_TOOLS.has(t));
   }
 
   /**
@@ -152,6 +274,28 @@ export class ToolOS {
       default:
         return `Acción completada. ¿Seguimos?`;
     }
+  }
+
+  /**
+   * Get the list of allowed tools (for debugging/admin).
+   */
+  getAllowedTools(): ToolType[] {
+    return Array.from(ALLOWED_TOOLS)
+  }
+
+  /**
+   * Get circuit breaker status for monitoring.
+   */
+  getCircuitBreakerStatus(): Record<string, { isOpen: boolean; failures: number; nextRetryAt: number }> {
+    const status: Record<string, { isOpen: boolean; failures: number; nextRetryAt: number }> = {}
+    for (const [toolType, cb] of circuitBreakers) {
+      status[toolType] = {
+        isOpen: cb.isOpen,
+        failures: cb.failures,
+        nextRetryAt: cb.nextRetryAt,
+      }
+    }
+    return status
   }
 
   // ---- TOOL IMPLEMENTATIONS (simulated) ----

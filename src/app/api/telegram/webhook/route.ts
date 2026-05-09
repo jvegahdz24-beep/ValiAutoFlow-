@@ -4,15 +4,27 @@
 // This is the public endpoint that Telegram calls when a user
 // sends a message to the bot. It processes the update and
 // sends a reply back via the Telegram API.
+//
+// SECURITY: Verifies chatId against allowedChatIds in config.
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { processTelegramUpdate, sendTelegramMessage } from '@/lib/telegram/bot'
 import { db } from '@/lib/db'
 import { type TelegramUpdate } from '@/lib/telegram/types'
+import { checkRateLimit, getClientIdentifier } from '@/lib/security'
 
 export async function POST(request: NextRequest) {
   try {
+    // ──────────────────────────────────────────────────────────
+    // RATE LIMIT: Prevent abuse on Telegram webhook endpoint
+    // ──────────────────────────────────────────────────────────
+    const clientId = getClientIdentifier(request)
+    const rateCheck = checkRateLimit(`tg_webhook_${clientId}`, { limit: 60, windowMs: 60_000 })
+    if (!rateCheck.allowed) {
+      return NextResponse.json({ ok: true }) // Always return 200 to Telegram
+    }
+
     const body = await request.json() as TelegramUpdate
 
     // ──────────────────────────────────────────────────────────
@@ -74,6 +86,22 @@ export async function POST(request: NextRequest) {
     })
 
     if (!botConfig || !botConfig.isActive) {
+      return NextResponse.json({ ok: true })
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // SECURITY: Verify chatId is in the allowedChatIds list
+    // Prevents unauthorized Telegram users from controlling the bot
+    // ──────────────────────────────────────────────────────────
+    const allowedChatIds: string[] = JSON.parse(botConfig.allowedChatIds || '[]')
+    if (allowedChatIds.length > 0 && !allowedChatIds.includes(chatId)) {
+      console.warn(`[Telegram Webhook] Unauthorized chatId: ${chatId}. Allowed: ${allowedChatIds.join(', ')}`)
+      // Optionally notify the unauthorized user
+      await sendTelegramMessage(
+        botConfig.botToken,
+        chatId,
+        '⛔ No tienes autorización para usar este bot. Contacta al administrador.'
+      ).catch(() => {})
       return NextResponse.json({ ok: true })
     }
 

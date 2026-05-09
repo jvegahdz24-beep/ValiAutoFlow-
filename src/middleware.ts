@@ -12,6 +12,10 @@ if (process.env.NODE_ENV === 'production') {
 
 // Public routes that don't require authentication
 const publicRoutes = [
+  "/",               // Landing page
+  "/precios",        // Pricing page
+  "/privacidad",     // Privacy policy
+  "/terminos",       // Terms of service
   "/auth/signin",
   "/auth/register",
   "/api/auth/demo-login",
@@ -30,10 +34,14 @@ export default withAuth(
     const token = req.nextauth.token
 
     // Allow public routes
-    if (publicRoutes.some((route) => pathname.startsWith(route))) {
-      // If user is already authenticated and visiting auth pages, redirect to home
+    if (publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/') || (route !== '/' && pathname.startsWith(route)))) {
+      // If user is already authenticated and visiting auth pages, redirect to dashboard
       if (token && authRoutes.some((route) => pathname.startsWith(route))) {
-        return NextResponse.redirect(new URL("/", req.url))
+        return NextResponse.redirect(new URL("/dashboard", req.url))
+      }
+      // If user is authenticated and visiting landing page, redirect to dashboard
+      if (token && pathname === '/') {
+        return NextResponse.redirect(new URL("/dashboard", req.url))
       }
       return NextResponse.next()
     }
@@ -71,7 +79,7 @@ export default withAuth(
         const { pathname } = req.nextUrl
 
         // Allow public routes without authentication
-        if (publicRoutes.some((route) => pathname.startsWith(route))) {
+        if (publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/') || (route !== '/' && pathname.startsWith(route)))) {
           return true
         }
 

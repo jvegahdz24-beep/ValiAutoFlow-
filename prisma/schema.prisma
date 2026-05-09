@@ -219,6 +219,8 @@ model Message {
   @@index([conversationId])
   @@index([status])
   @@index([senderType])
+  @@index([createdAt])
+  @@index([direction, createdAt])
   @@map("messages")
 }
 

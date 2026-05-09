@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 const CARNALS = [
   { type: 'JHON', name: 'JHON', description: 'Motor principal de ventas cognitivas. Analiza intenciones, genera respuestas persuasivas y guía conversaciones hacia el cierre.' },
@@ -24,8 +24,23 @@ function pick<T>(arr: readonly T[]): T { return arr[Math.floor(Math.random() * a
 function pickM<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)] }
 function rand(min: number, max: number): number { return Math.floor(Math.random() * (max - min + 1)) + min }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    // ──────────────────────────────────────────────────────────
+    // SECURITY: This endpoint seeds the database.
+    // Only accessible with INTERNAL_API_KEY or in development mode.
+    // ──────────────────────────────────────────────────────────
+    const internalApiKey = request.headers.get('x-internal-api-key')
+    const isAuthorized = internalApiKey === process.env.INTERNAL_API_KEY
+    const isDevOnly = process.env.NODE_ENV === 'development' && !process.env.VERCEL
+
+    if (!isAuthorized && !isDevOnly) {
+      return NextResponse.json(
+        { error: 'Forbidden: Database seeding requires authentication' },
+        { status: 403 }
+      )
+    }
+
     // Check if workspace already exists
     const existing = await db.workspace.findFirst({ where: { slug: 'valiautoflow-demo' } })
     if (existing) {

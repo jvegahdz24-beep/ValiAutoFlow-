@@ -3,6 +3,28 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import { db } from "@/lib/db"
 import { getUserFirstWorkspace, createDefaultWorkspace } from "@/lib/auth"
+import bcrypt from "bcryptjs"
+
+/**
+ * Hash a password using bcrypt (10 rounds).
+ * Used during registration and password updates.
+ */
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 10)
+}
+
+/**
+ * Compare a plaintext password against a stored hash.
+ * Falls back to direct comparison for legacy/demo plaintext passwords.
+ */
+export async function comparePassword(plaintext: string, stored: string): Promise<boolean> {
+  // If the stored password looks like a bcrypt hash ($2a$, $2b$, $2y$)
+  if (stored.startsWith('$2')) {
+    return bcrypt.compare(plaintext, stored)
+  }
+  // Legacy/demo plaintext comparison (will be removed after migration)
+  return plaintext === stored
+}
 
 /**
  * Custom PrismaAdapter using our db client
@@ -145,8 +167,10 @@ export const authOptions: NextAuthOptions = {
           throw new Error("This account uses OAuth. Please sign in with Google.")
         }
 
-        // Simple comparison — in production use bcrypt
-        if (user.password !== credentials.password) {
+        // Compare password with bcrypt hash
+        // Supports both hashed (new) and plaintext (legacy/demo) passwords
+        const isPasswordValid = await comparePassword(credentials.password, user.password)
+        if (!isPasswordValid) {
           throw new Error("Invalid password")
         }
 
