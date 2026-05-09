@@ -65,6 +65,7 @@ function DashboardContent() {
       activeView={activeView}
       onViewChange={setActiveView}
       workspaceName="ValiAutoFlow Workspace"
+      workspaceId={workspaceId}
     >
       {activeView === 'dashboard' && <OverviewDashboard workspaceId={workspaceId} />}
       {activeView === 'conversations' && <ConversationsView workspaceId={workspaceId} />}

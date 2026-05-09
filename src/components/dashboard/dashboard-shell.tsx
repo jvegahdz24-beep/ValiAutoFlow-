@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { NotificationCenter } from '@/components/marketing/NotificationCenter'
 import {
   LayoutDashboard,
   MessageSquare,
@@ -35,16 +36,16 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'conversations', label: 'Conversations', icon: MessageSquare },
+  { id: 'conversations', label: 'Conversaciones', icon: MessageSquare },
   { id: 'leads', label: 'Leads', icon: Users },
   { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
   { id: 'agents', label: 'Agents', icon: Brain, badge: '7 Carnales' },
-  { id: 'observability', label: 'Observability', icon: Eye },
+  { id: 'marketing', label: 'Marketing', icon: Megaphone },
   { id: 'followups', label: 'Follow-ups', icon: Clock },
   { id: 'policies', label: 'Policies', icon: Shield },
+  { id: 'observability', label: 'Observability', icon: Eye },
   { id: 'audit', label: 'Audit', icon: ScrollText },
   { id: 'config', label: 'Configuración', icon: Settings },
-  { id: 'marketing', label: 'Marketing', icon: Megaphone },
 ]
 
 interface DashboardShellProps {
@@ -52,6 +53,7 @@ interface DashboardShellProps {
   onViewChange: (view: ViewType) => void
   children: React.ReactNode
   workspaceName?: string
+  workspaceId?: string
 }
 
 function SidebarContent({
@@ -135,7 +137,7 @@ function SidebarContent({
   )
 }
 
-export function DashboardShell({ activeView, onViewChange, children, workspaceName }: DashboardShellProps) {
+export function DashboardShell({ activeView, onViewChange, children, workspaceName, workspaceId }: DashboardShellProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -186,7 +188,7 @@ export function DashboardShell({ activeView, onViewChange, children, workspaceNa
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex flex-1 items-center gap-2">
-            <h2 className="text-sm font-medium capitalize">{activeView.replace('-', ' ')}</h2>
+            <h2 className="text-sm font-medium capitalize">{activeView === 'config' ? 'Configuración' : activeView === 'marketing' ? 'Marketing' : activeView}</h2>
             {workspaceName && (
               <>
                 <span className="text-muted-foreground">·</span>
@@ -195,6 +197,8 @@ export function DashboardShell({ activeView, onViewChange, children, workspaceNa
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* Notification Center */}
+            {workspaceId && <NotificationCenter workspaceId={workspaceId} />}
             <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs text-muted-foreground hidden sm:inline">System Active</span>
           </div>

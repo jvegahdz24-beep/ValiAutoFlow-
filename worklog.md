@@ -3,32 +3,53 @@
 ---
 Task ID: 1
 Agent: Main Agent
-Task: Build Configuration Wizard UI for ValiAutoFlow
+Task: Build complete ValiAutoFlow ecosystem - APIs, Marketing UI, Dashboard, Notifications, Queue
 
 Work Log:
-- Explored existing project structure: found existing ConfigView (section-based), config API route, WorkspaceConfig Prisma model
-- Identified ambiguous route conflict between [id] and [workspaceId] API routes
-- Resolved by removing [id] directory and moving config route under [workspaceId]
-- Created 9 new component files in src/components/config/:
-  - ConfigWizard.tsx (main wizard container with step navigation, progress bar, animated transitions)
-  - shared/TimeSlotPicker.tsx (weekly day selector + time range picker)
-  - shared/DynamicList.tsx (reusable field array component with add/remove, max items)
-  - steps/BasicInfoStep.tsx (business name, rubro, timezone, schedule)
-  - steps/ProductsStep.tsx (dynamic products/services list with price + duration)
-  - steps/LeadFormulaStep.tsx (loss formula: volume keyword, conversion metric, ticket, funnel note with live preview)
-  - steps/CustomQuestionsStep.tsx (max 3 custom questions with stage selection)
-  - steps/PoliciesStep.tsx (toggle switches for show_price_early, auto_schedule, auto_followup, max_questions_per_turn)
-  - steps/ReviewActivateStep.tsx (full review summary + PUT to API + activation)
-- Updated config-view.tsx to use ConfigWizard instead of old section-based layout
-- Fixed TypeScript errors in config-view.tsx (type casting for Record<string, unknown>)
-- Updated API route params from {id} to {workspaceId} for consistency
-- Build passes cleanly, ESLint passes, no TS errors in new files
+- Added Notification model to Prisma schema (id, workspaceId, type, title, description, read, actionUrl, createdAt)
+- Ran prisma db push to sync database
+- Created 8 API route files:
+  - /api/workspaces/[workspaceId]/campaigns (GET list + POST create)
+  - /api/workspaces/[workspaceId]/campaigns/[campaignId] (GET detail + PUT update + DELETE)
+  - /api/workspaces/[workspaceId]/campaigns/[campaignId]/send (POST execute campaign)
+  - /api/workspaces/[workspaceId]/segments (GET list + POST create)
+  - /api/workspaces/[workspaceId]/segments/build (POST preview/count)
+  - /api/workspaces/[workspaceId]/notifications (GET list + POST create)
+  - /api/workspaces/[workspaceId]/notifications/[notificationId]/read (POST mark read)
+- Created BullMQ campaign queue module with graceful Redis fallback
+- Created 3 new marketing UI components:
+  - CampaignForm.tsx - Dialog form for creating campaigns with channel, template, segment filters
+  - SegmentBuilder.tsx - Visual segment builder with tags, status, temperature, score filters + preview
+  - NotificationCenter.tsx - Notification dropdown with useQuery polling, unread badge, mark-as-read
+- Enhanced MarketingView with:
+  - Full campaign table (name, channel, status, sent/delivered, actions)
+  - Campaign actions: send (play), pause, delete, view stats
+  - Tabs: Campaigns, Segmentos, Analytics
+  - Campaign detail dialog with stats breakdown
+  - Integration with CampaignForm and SegmentBuilder
+- Enhanced OverviewDashboard with unified KPIs:
+  - Sales: leads, conversations, conversion rate, revenue
+  - Alerts: lost leads with estimated loss, appointments, active campaigns, notifications
+  - Charts: source distribution, temperature, stage funnel
+  - Recent conversations + 7 Carnales status
+- Enhanced Dashboard API with marketing and notification data:
+  - Campaign metrics (active, total, sent, delivered, opened, converted, open rate, conversion rate)
+  - Unread notifications count
+  - Recent notifications and campaigns
+  - Estimated revenue loss from lost leads
+- Updated DashboardShell with:
+  - NotificationCenter in header bar
+  - workspaceId prop passed through
+  - Marketing nav item repositioned
+  - Spanish labels for config and marketing
+- Updated page.tsx to pass workspaceId to DashboardShell
+- All lint passes, build passes cleanly
 
 Stage Summary:
-- Complete 6-step wizard UI built for business configuration
-- Uses react-hook-form with FormProvider for form state management
-- Animated step transitions with framer-motion
-- Progress bar and step indicators with completion states
-- Responsive design with mobile navigation support
-- API integration: GET config on load, PUT config on activation
-- All data flows through /api/workspaces/[workspaceId]/config
+- Complete marketing campaign system: create, execute, track, manage
+- Full notification system with in-app UI and 30s polling
+- Unified dashboard combining sales + marketing KPIs
+- Segment builder for targeted campaigns
+- BullMQ queue with graceful Redis fallback
+- 15+ new API endpoints
+- 3 new UI components, 3 enhanced views
