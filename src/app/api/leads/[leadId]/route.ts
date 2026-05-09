@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getServerSession } from '@/lib/auth';
 
 // GET /api/leads/[leadId] — Get lead details
 export async function GET(
@@ -7,6 +8,10 @@ export async function GET(
   { params }: { params: Promise<{ leadId: string }> }
 ) {
   try {
+    const session = await getServerSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     const { leadId } = await params;
 
     const lead = await db.lead.findUnique({
@@ -65,6 +70,10 @@ export async function PATCH(
   { params }: { params: Promise<{ leadId: string }> }
 ) {
   try {
+    const session = await getServerSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     const { leadId } = await params;
     const body = await request.json();
     const {

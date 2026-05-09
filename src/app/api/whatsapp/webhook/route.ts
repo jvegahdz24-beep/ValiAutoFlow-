@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyWebhook, parseIncomingMessage, parseStatusUpdate } from '@/lib/whatsapp/webhook'
 import { markMessageRead } from '@/lib/whatsapp/client'
+import { verifyMetaSignature, checkRateLimit, getClientIdentifier } from '@/lib/security'
 
 // ============================================================
 // GET — Webhook Verification
@@ -68,7 +69,45 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() as Record<string, unknown>
+    // ──────────────────────────────────────────────────────────
+    // RATE LIMIT: Prevent abuse on webhook endpoint
+    // ──────────────────────────────────────────────────────────
+    const clientId = getClientIdentifier(request)
+    const rateCheck = checkRateLimit(`wa_webhook_${clientId}`, { limit: 100, windowMs: 60_000 })
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rateCheck.retryAfterMs || 60_000) / 1000)) } }
+      )
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // HMAC SIGNATURE VERIFICATION
+    // ──────────────────────────────────────────────────────────
+    // Meta signs every webhook POST with X-Hub-Signature-256
+    // We must verify it to prevent spoofed messages.
+    const rawBody = await request.text()
+    const signature = request.headers.get('x-hub-signature-256')
+    const appSecret = process.env.WHATSAPP_APP_SECRET || ''
+
+    if (appSecret) {
+      // If APP_SECRET is configured, enforce HMAC verification
+      const isValid = await verifyMetaSignature(rawBody, signature, appSecret)
+      if (!isValid) {
+        console.warn('[WhatsApp Webhook] POST — Invalid HMAC signature. Possible spoofed payload.')
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+      }
+    } else {
+      // No APP_SECRET configured — log warning but allow (for dev/testing)
+      console.warn('[WhatsApp Webhook] POST — WHATSAPP_APP_SECRET not set. HMAC verification skipped. SET IT IN PRODUCTION!')
+    }
+
+    let body: Record<string, unknown>
+    try {
+      body = JSON.parse(rawBody) as Record<string, unknown>
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    }
 
     // ──────────────────────────────────────────────────────────
     // STEP 1: Determine if this is a message or a status update
@@ -248,7 +287,10 @@ async function handleIncomingMessage(
 
       await fetch(processUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-api-key': process.env.INTERNAL_API_KEY || '',
+        },
         body: JSON.stringify({
           conversationId: conversation.id,
           messageContent: parsed.text,

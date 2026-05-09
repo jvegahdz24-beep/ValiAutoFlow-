@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getServerSession } from '@/lib/auth'
 import {
   setupTelegramWebhook,
   removeTelegramWebhook,
@@ -15,6 +16,11 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
+  const session = await getServerSession()
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const { workspaceId } = await params
 
   const config = await db.telegramBotConfig.findUnique({
@@ -77,6 +83,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
+  const session = await getServerSession()
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const { workspaceId } = await params
   const body = await request.json()
 
@@ -152,6 +163,11 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
+  const session = await getServerSession()
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const { workspaceId } = await params
   const body = await request.json()
 
@@ -209,6 +225,11 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
+  const session = await getServerSession()
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   const { workspaceId } = await params
 
   const existing = await db.telegramBotConfig.findUnique({

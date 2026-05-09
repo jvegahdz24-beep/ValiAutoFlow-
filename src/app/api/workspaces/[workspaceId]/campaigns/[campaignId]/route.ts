@@ -1,10 +1,16 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from '@/lib/auth'
 
 // GET - Campaign detail with messages
 export async function GET(request: NextRequest, { params }: { params: Promise<{ workspaceId: string; campaignId: string }> }) {
-  const { workspaceId, campaignId } = await params
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { workspaceId, campaignId } = await params
     const campaign = await db.campaign.findUnique({
       where: { id: campaignId, workspaceId },
       include: {
@@ -23,8 +29,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 // PUT - Update campaign (status, name, etc.)
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ workspaceId: string; campaignId: string }> }) {
-  const { workspaceId, campaignId } = await params
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { workspaceId, campaignId } = await params
     const body = await request.json()
     const update: any = {}
     if (body.status) update.status = body.status
@@ -68,8 +79,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 // DELETE - Remove campaign
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ workspaceId: string; campaignId: string }> }) {
-  const { workspaceId, campaignId } = await params
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { workspaceId, campaignId } = await params
     await db.campaignMessage.deleteMany({ where: { campaignId } })
     await db.campaign.delete({ where: { id: campaignId, workspaceId } })
     return NextResponse.json({ success: true })

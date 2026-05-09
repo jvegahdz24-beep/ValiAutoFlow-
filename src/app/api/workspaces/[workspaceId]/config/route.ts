@@ -1,9 +1,15 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from '@/lib/auth'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
-  const { workspaceId: id } = await params
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { workspaceId: id } = await params
     let config = await db.workspaceConfig.findUnique({ where: { workspaceId: id } })
     if (!config) {
       // Create default config if none exists
@@ -16,8 +22,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
-  const { workspaceId: id } = await params
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { workspaceId: id } = await params
     const body = await request.json()
 
     // Build update data with proper JSON serialization

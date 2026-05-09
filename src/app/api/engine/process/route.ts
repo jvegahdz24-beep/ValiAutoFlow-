@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getServerSession } from '@/lib/auth'
 import { Orchestrator } from '@/lib/engine/orchestrator'
 import { isConversationTakenOver, notifyHumanTakeoverNeeded, notifyHotLead } from '@/lib/telegram/cognitive-bridge'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/channel-bridge'
@@ -14,6 +15,20 @@ import { type LeadArchetype, type LeadTemperature } from '@/lib/engine/types'
 
 export async function POST(request: NextRequest) {
   try {
+    // ──────────────────────────────────────────────────────────
+    // AUTH: Accept either user session OR internal API key
+    // Webhooks call this route internally without a session cookie.
+    // ──────────────────────────────────────────────────────────
+    const internalApiKey = request.headers.get('x-internal-api-key')
+    const isInternalCall = internalApiKey === process.env.INTERNAL_API_KEY
+
+    if (!isInternalCall) {
+      const session = await getServerSession()
+      if (!session?.user) {
+        return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+      }
+    }
+
     const body = await request.json()
     const { conversationId, messageContent, workspaceId } = body
 

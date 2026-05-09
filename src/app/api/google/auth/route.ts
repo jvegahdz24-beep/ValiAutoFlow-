@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateAuthUrl, getTokensFromCode } from '@/lib/google/auth';
 import { db } from '@/lib/db';
+import { getServerSession } from '@/lib/auth';
 
 /**
  * GET /api/google/auth
@@ -10,6 +11,10 @@ import { db } from '@/lib/db';
  */
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     const { searchParams } = new URL(request.url);
     const workspaceId = searchParams.get('workspaceId');
 
@@ -64,6 +69,10 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     const body = await request.json();
     const { code, workspaceId } = body;
 

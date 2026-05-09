@@ -1,9 +1,15 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from '@/lib/auth'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ campaignId: string }> }) {
-  const { campaignId } = await params
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { campaignId } = await params
     const campaign = await db.campaign.findUnique({
       where: { id: campaignId },
       include: { campaignMessages: { take: 50, orderBy: { createdAt: 'desc' } } },
@@ -16,8 +22,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ campaignId: string }> }) {
-  const { campaignId } = await params
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { campaignId } = await params
     const body = await request.json()
     const updateData: Record<string, unknown> = {}
     if (body.name !== undefined) updateData.name = body.name

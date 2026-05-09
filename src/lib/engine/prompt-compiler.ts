@@ -12,6 +12,7 @@ import {
   type JHONConfig,
 } from './types';
 import { type BusinessConfig } from './jhon';
+import { sanitizeForPrompt, wrapUserContent } from '@/lib/security';
 
 const DEFAULT_JHON: JHONConfig = {
   neverSellBeforeDiagnose: true,
@@ -124,14 +125,14 @@ export class PromptCompiler {
     const productsList = config.products?.map(p => {
       const priceStr = p.price > 0 ? `$${p.price.toLocaleString()}` : 'gratuito';
       const durationStr = p.duration_min ? ` (${p.duration_min}min)` : '';
-      const noteStr = p.note ? ` — ${p.note}` : '';
-      return `  - ${p.name}: ${priceStr}${durationStr}${noteStr}`;
+      const noteStr = p.note ? ` — ${sanitizeForPrompt(p.note)}` : '';
+      return `  - ${sanitizeForPrompt(p.name)}: ${priceStr}${durationStr}${noteStr}`;
     }).join('\n') || 'No definidos';
 
     return `--- CONFIGURACIÓN DEL NEGOCIO ---
 DATOS DEL NEGOCIO:
-- Nombre: ${config.businessName}
-- Rubro: ${config.businessType}
+- Nombre: ${sanitizeForPrompt(config.businessName)}
+- Rubro: ${sanitizeForPrompt(config.businessType)}
 - Horario: ${scheduleDays} ${scheduleHours} (${config.schedule?.timezone || 'America/Mexico_City'})
 - Productos/Servicios:
 ${productsList}`;
@@ -142,11 +143,10 @@ ${productsList}`;
 
     const lf = config.leadFormula;
     return `--- FÓRMULA DE PÉRDIDA ESTIMADA ---
-- Volumen keyword: "${lf.volume_keyword || 'leads'}"
-- Métrica de conversión: "${lf.conversion_metric || 'ventas'}"
-- Ticket promedio: $${(lf.average_ticket || 0).toLocaleString()}
-- Nota del funnel: ${lf.funnel_note || 'No definida'}
-
+${wrapUserContent(`Volumen keyword: "${sanitizeForPrompt(lf.volume_keyword || 'leads')}"
+Métrica de conversión: "${sanitizeForPrompt(lf.conversion_metric || 'ventas')}"
+Ticket promedio: $${(lf.average_ticket || 0).toLocaleString()}
+Nota del funnel: ${sanitizeForPrompt(lf.funnel_note || 'No definida')}`, 'FORMULA_PERDIDA')}
 Si el lead te da volumen semanal y conversión actual, aplica mentalmente:
   leads_perdidos = (volumen - convertidos) * ticket_promedio * 4 (semanas al mes).
 IMPORTANTE: Cuantifica la pérdida en términos concretos. El lead debe SENTIR que pierde dinero.`;
@@ -164,7 +164,7 @@ IMPORTANTE: Cuantifica la pérdida en términos concretos. El lead debe SENTIR q
     if (pending.length === 0) return '';
 
     const questionsList = pending.map(q =>
-      `- "${q.text}" (propósito: ${q.purpose})`
+      `- "${sanitizeForPrompt(q.text)}" (propósito: ${sanitizeForPrompt(q.purpose)})`
     ).join('\n');
 
     return `--- PREGUNTAS PENDIENTES (SIN PARECER ROBÓTICO) ---

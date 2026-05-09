@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { seedDemoData } from "@/lib/demo/seed"
+import { checkRateLimit, getClientIdentifier } from "@/lib/security"
 
 const DEMO_EMAIL = "demo@valiautoflow.com"
 const DEMO_PASSWORD = "demo123"
@@ -13,9 +14,21 @@ const DEMO_PASSWORD = "demo123"
  *
  * This approach keeps auth flow consistent: we don't bypass NextAuth,
  * we just auto-provision the demo account and let the client call signIn().
+ *
+ * Rate limited: max 5 requests per minute per IP.
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    // Rate limit demo-login to prevent abuse
+    const clientId = getClientIdentifier(request)
+    const rateCheck = checkRateLimit(`demo_login_${clientId}`, { limit: 5, windowMs: 60_000 })
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait a moment and try again." },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rateCheck.retryAfterMs || 60_000) / 1000)) } }
+      )
+    }
+
     // 1. Find or create the demo user
     let user = await db.user.findUnique({ where: { email: DEMO_EMAIL } })
 

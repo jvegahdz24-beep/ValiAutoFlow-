@@ -1,10 +1,16 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from '@/lib/auth'
 
 // GET - List segments
 export async function GET(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
-  const { workspaceId } = await params
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { workspaceId } = await params
     const segments = await db.segment.findMany({
       where: { workspaceId },
       orderBy: { createdAt: 'desc' },
@@ -17,8 +23,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 // POST - Create segment
 export async function POST(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
-  const { workspaceId } = await params
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { workspaceId } = await params
     const body = await request.json()
     const { name, description, conditions } = body
 

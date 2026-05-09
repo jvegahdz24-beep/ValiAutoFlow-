@@ -1,5 +1,14 @@
 import { withAuth } from "next-auth/middleware"
 import { NextResponse } from "next/server"
+import { validateNextAuthSecret } from "@/lib/security"
+
+// Validate NEXTAUTH_SECRET in production at module load time
+if (process.env.NODE_ENV === 'production') {
+  const secretCheck = validateNextAuthSecret()
+  if (!secretCheck.valid) {
+    console.error(`🚨 SECURITY: ${secretCheck.reason}. The application may be vulnerable!`)
+  }
+}
 
 // Public routes that don't require authentication
 const publicRoutes = [
@@ -10,9 +19,6 @@ const publicRoutes = [
   "/api/whatsapp/webhook",
   "/api/telegram/webhook",
   "/api/seed",
-  "/api/workspaces",
-  "/api/google/auth",
-  "/api/google/calendar",
 ]
 
 // Routes that should redirect away if already authenticated

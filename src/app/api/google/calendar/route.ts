@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getServerSession } from '@/lib/auth';
 import { getAvailableSlots, createEvent, listUpcomingEvents, cancelEvent } from '@/lib/google/calendar';
 import type { GoogleCalendarConfig } from '@/lib/google/calendar';
 
@@ -15,6 +16,10 @@ import type { GoogleCalendarConfig } from '@/lib/google/calendar';
  */
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     const { searchParams } = new URL(request.url);
     const workspaceId = searchParams.get('workspaceId');
     const startDate = searchParams.get('startDate');
@@ -97,6 +102,10 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     const body = await request.json();
     const { workspaceId, action = 'create' } = body;
 

@@ -1,10 +1,16 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from '@/lib/auth'
 
 // POST - Execute/send campaign
 export async function POST(request: NextRequest, { params }: { params: Promise<{ workspaceId: string; campaignId: string }> }) {
-  const { workspaceId, campaignId } = await params
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { workspaceId, campaignId } = await params
     const campaign = await db.campaign.findUnique({
       where: { id: campaignId, workspaceId },
     })

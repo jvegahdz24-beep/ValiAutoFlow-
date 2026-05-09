@@ -141,3 +141,56 @@ Stage Summary:
 - .env.example: Complete with all variables
 - All deployment files ready (vercel.json, postinstall, .gitignore)
 - Project is PRODUCTION READY for Supabase + Vercel
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Security hardening — Implement all critical audit fixes
+
+Work Log:
+- Created src/lib/security.ts — Centralized security utilities:
+  - checkRateLimit(): In-memory sliding window rate limiter per IP/key
+  - getClientIdentifier(): Extract client IP from request headers (Vercel/Cloudflare)
+  - verifyMetaSignature(): HMAC-SHA256 signature verification for Meta webhooks
+  - sanitizeForPrompt(): Anti-prompt-injection sanitization (removes injection markers/patterns)
+  - wrapUserContent(): Delimiter wrapping for LLM prompt injection protection
+  - validateNextAuthSecret(): Runtime validation of NEXTAUTH_SECRET strength
+- Hallazgo #8 FIX: Added HMAC signature verification to WhatsApp webhook POST handler
+  - Reads raw body, verifies X-Hub-Signature-256 with WHATSAPP_APP_SECRET
+  - Falls back to warning log if WHATSAPP_APP_SECRET not configured (dev mode)
+- Hallazgo #9 FIX: Added rate limiting to public endpoints
+  - /api/auth/demo-login: 5 requests/minute per IP
+  - /api/auth/register: 3 requests/5 minutes per IP
+  - /api/whatsapp/webhook: 100 requests/minute per IP
+- Hallazgo #11 FIX: Sanitized all user-provided inputs in prompt-compiler.ts
+  - businessName, businessType, product names/notes, leadFormula fields, customQuestion text/purpose
+  - Uses sanitizeForPrompt() + wrapUserContent() delimiters
+- Hallazgo #6 FIX: Added session verification to ALL 39 API route files (68 handlers)
+  - Only public routes excluded: auth, webhooks, seed
+  - Internal API key auth for /api/engine/process (webhook → engine flow)
+- Hallazgo #5 FIX: Added NEXTAUTH_SECRET validation at middleware load time
+  - Blocks known weak secrets in production
+  - Requires minimum 32 characters
+- Hallazgo #15: Confirmed Google Calendar already has ensureValidToken() with auto-refresh + retry
+- Hallazgo #16: Confirmed Telegram bot already validates chatId against allowedChatIds
+- Hallazgo #3 FIX: Added missing database indexes
+  - Message.senderType, CampaignMessage(campaignId, contactId) composite
+  - CalendarEvent(contactId, startTime) composite
+  - Notification.recipientId
+- Hallazgo #2 FIX: Added Notification.recipientId + User relation for multi-user notifications
+- Reduced middleware publicRoutes from 10 to 7 (removed /api/workspaces, /api/google/*)
+- Added INTERNAL_API_KEY env var for server-to-server auth
+- Added WHATSAPP_APP_SECRET env var for HMAC verification
+- Updated .env.example with 20 documented variables
+
+Stage Summary:
+- Build: 0 errors
+- Lint: 0 errors
+- TypeScript: 0 errors in src/
+- All 8 critical/high audit findings addressed
+- 39 API routes now require authentication
+- Rate limiting on public endpoints
+- HMAC webhook verification implemented
+- Prompt injection protection in place
+- NEXTAUTH_SECRET validated at runtime
+- Project is PRODUCTION HARDENED

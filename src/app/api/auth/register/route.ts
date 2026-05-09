@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { createDefaultWorkspace } from "@/lib/auth"
+import { checkRateLimit, getClientIdentifier } from "@/lib/security"
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit registration to prevent abuse
+    const clientId = getClientIdentifier(request)
+    const rateCheck = checkRateLimit(`register_${clientId}`, { limit: 3, windowMs: 300_000 }) // 3 per 5 min
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many registration attempts. Please wait a few minutes." },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rateCheck.retryAfterMs || 300_000) / 1000)) } }
+      )
+    }
+
     const body = await request.json()
     const { name, email, password, businessName } = body
 

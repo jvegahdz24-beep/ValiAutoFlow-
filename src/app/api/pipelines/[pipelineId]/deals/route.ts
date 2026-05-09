@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getServerSession } from '@/lib/auth';
 
 // GET /api/pipelines/[pipelineId]/deals — List deals in pipeline (grouped by stage)
 export async function GET(
@@ -7,6 +8,10 @@ export async function GET(
   { params }: { params: Promise<{ pipelineId: string }> }
 ) {
   try {
+    const session = await getServerSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     const { pipelineId } = await params;
 
     const pipeline = await db.pipeline.findUnique({
@@ -88,6 +93,10 @@ export async function POST(
   { params }: { params: Promise<{ pipelineId: string }> }
 ) {
   try {
+    const session = await getServerSession();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     const { pipelineId } = await params;
     const body = await request.json();
     const {

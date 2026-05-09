@@ -1,10 +1,16 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from '@/lib/auth'
 
 // POST - Build/preview a segment (count leads matching conditions)
 export async function POST(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
-  const { workspaceId } = await params
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { workspaceId } = await params
     const body = await request.json()
     const { conditions } = body
 

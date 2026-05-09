@@ -1,16 +1,22 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from '@/lib/auth'
 
 // GET - List campaigns for workspace
 export async function GET(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
-  const { workspaceId } = await params
-  const { searchParams } = new URL(request.url)
-  const status = searchParams.get('status')
-  
-  const where: any = { workspaceId }
-  if (status) where.status = status
-
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { workspaceId } = await params
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get('status')
+    
+    const where: any = { workspaceId }
+    if (status) where.status = status
+
     const [campaigns, total] = await Promise.all([
       db.campaign.findMany({
         where,
@@ -27,8 +33,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 // POST - Create campaign
 export async function POST(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
-  const { workspaceId } = await params
   try {
+    const session = await getServerSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { workspaceId } = await params
     const body = await request.json()
     const { name, channel, templateBody, segmentQuery, description } = body
 
