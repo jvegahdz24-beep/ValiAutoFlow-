@@ -36,6 +36,10 @@ model Workspace {
   behavioralTraces               BehavioralTrace[]
   aiCostTrackings                AICostTracking[]
   deals                          Deal[]
+  workspaceConfig               WorkspaceConfig?
+  campaigns                     Campaign[]
+  segments                      Segment[]
+  calendarEvents                CalendarEvent[]
 
   @@map("workspaces")
 }
@@ -733,4 +737,119 @@ model ToolAction {
   @@index([agentExecutionId])
   @@index([status])
   @@map("tool_actions")
+}
+
+// ============================================================
+// BUSINESS CONFIGURATION (No-code setup)
+// ============================================================
+
+model WorkspaceConfig {
+  id              String   @id @default(cuid())
+  workspaceId     String   @unique
+  businessName    String   @default("Mi Negocio")
+  businessType    String   @default("general") // mecanica, clinica, restaurante, inmobiliaria, etc.
+  schedule        String   @default("{}") // JSON: { timezone, days, hours }
+  products        String   @default("[]") // JSON: [{ name, price, duration_min, note }]
+  leadFormula     String   @default("{}") // JSON: { volume_keyword, conversion_metric, average_ticket, funnel_note }
+  customQuestions String   @default("[]") // JSON: [{ id, text, purpose, stage }]
+  policies        String   @default("{}") // JSON: { show_price_early, auto_schedule, max_questions_per_turn, auto_followup }
+  channels        String   @default("{}") // JSON: { whatsapp, telegram, email }
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("workspace_configs")
+}
+
+// ============================================================
+// MARKETING (MARK Agent)
+// ============================================================
+
+model Campaign {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  name         String
+  description  String   @default("")
+  segmentQuery String   @default("{}") // JSON: conditions for filtering leads
+  channel      String   @default("whatsapp") // whatsapp, email, sms
+  templateId   String?
+  templateBody String   @default("") // message template with {{variables}}
+  status       String   @default("draft") // draft, active, paused, completed
+  stats        String   @default("{}") // JSON: { sent, delivered, opened, clicked, converted }
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaignMessages   CampaignMessage[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@map("campaigns")
+}
+
+model CampaignMessage {
+  id          String    @id @default(cuid())
+  campaignId  String
+  contactId   String
+  sentAt      DateTime?
+  status      String    @default("pending") // pending, sent, delivered, failed
+  openedAt    DateTime?
+  clickedAt   DateTime?
+  respondedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([contactId])
+  @@index([status])
+  @@map("campaign_messages")
+}
+
+model Segment {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String   @default("")
+  conditions  String   @default("{}") // JSON: { tags, stages, lastInteractionDays, scoreRange }
+  leadCount   Int      @default(0)
+  isDynamic   Boolean  @default(true)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("segments")
+}
+
+model CalendarEvent {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  contactId      String?
+  leadId         String?
+  googleEventId  String?
+  summary        String
+  description    String    @default("")
+  startTime      DateTime
+  endTime        DateTime
+  status         String    @default("scheduled") // scheduled, cancelled, completed
+  createdBy      String    @default("ai") // ai or human
+  meetLink       String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([leadId])
+  @@index([startTime])
+  @@map("calendar_events")
 }

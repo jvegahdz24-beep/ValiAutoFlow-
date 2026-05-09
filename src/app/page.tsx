@@ -12,6 +12,8 @@ import { ObservabilityView } from '@/components/dashboard/observability-view'
 import { FollowupsView } from '@/components/dashboard/followups-view'
 import { PoliciesView } from '@/components/dashboard/policies-view'
 import { AuditView } from '@/components/dashboard/audit-view'
+import { ConfigView } from '@/components/dashboard/config-view'
+import { MarketingView } from '@/components/dashboard/marketing-view'
 import { useWorkspace } from '@/hooks/use-workspace'
 import { Sparkles } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -73,6 +75,8 @@ function DashboardContent() {
       {activeView === 'followups' && <FollowupsView workspaceId={workspaceId} />}
       {activeView === 'policies' && <PoliciesView workspaceId={workspaceId} />}
       {activeView === 'audit' && <AuditView workspaceId={workspaceId} />}
+      {activeView === 'config' && <ConfigView workspaceId={workspaceId} />}
+      {activeView === 'marketing' && <MarketingView workspaceId={workspaceId} />}
     </DashboardShell>
   )
 }

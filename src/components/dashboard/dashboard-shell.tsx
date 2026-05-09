@@ -20,9 +20,11 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  Settings,
+  Megaphone,
 } from 'lucide-react'
 
-export type ViewType = 'dashboard' | 'conversations' | 'leads' | 'pipeline' | 'agents' | 'observability' | 'followups' | 'policies' | 'audit'
+export type ViewType = 'dashboard' | 'conversations' | 'leads' | 'pipeline' | 'agents' | 'observability' | 'followups' | 'policies' | 'audit' | 'config' | 'marketing'
 
 interface NavItem {
   id: ViewType
@@ -41,6 +43,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'followups', label: 'Follow-ups', icon: Clock },
   { id: 'policies', label: 'Policies', icon: Shield },
   { id: 'audit', label: 'Audit', icon: ScrollText },
+  { id: 'config', label: 'Configuración', icon: Settings },
+  { id: 'marketing', label: 'Marketing', icon: Megaphone },
 ]
 
 interface DashboardShellProps {

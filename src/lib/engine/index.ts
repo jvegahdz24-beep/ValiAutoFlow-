@@ -26,14 +26,17 @@ export type {
   PromptContext,
 } from './types';
 
-// 7 Carnales
+// 7 Carnales + MARK
 export { JHONAgent } from './jhon';
+export type { BusinessConfig } from './jhon';
 export { Orchestrator } from './orchestrator';
 export { MemoryEngine } from './memory-engine';
 export { RoutingEngine } from './routing-engine';
 export { FollowUpEngine } from './followup-engine';
 export { ObservabilityEngine } from './observability-engine';
 export { ToolOS } from './tool-os';
+export { MarketingAgent } from './mark-agent';
+export type { CampaignConfig, SegmentResult } from './mark-agent';
 
 // Supporting modules
 export { ConversationStageDetector } from './conversation-stage';
