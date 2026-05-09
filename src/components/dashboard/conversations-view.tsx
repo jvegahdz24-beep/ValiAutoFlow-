@@ -81,7 +81,7 @@ export function ConversationsView({ workspaceId }: ConversationsViewProps) {
       </div>
 
       {/* Detail Panel */}
-      <div className="hidden md:flex flex-1 flex-col">
+      <div data-tour="conversation-detail" className="hidden md:flex flex-1 flex-col">
         {!selected ? (
           <Card className="flex-1 flex items-center justify-center border-border/50 bg-card">
             <div className="text-center text-muted-foreground">
@@ -269,7 +269,7 @@ function ConversationDetail({
                   {conversation.priority}
                 </Badge>
               </div>
-              <div className="flex items-center justify-between text-xs">
+              <div data-tour="conversation-stage" className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Stage</span>
                 <StageBadge stage={conversation.stage} />
               </div>

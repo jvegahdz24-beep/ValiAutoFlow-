@@ -220,7 +220,7 @@ export function MarketingView({ workspaceId }: { workspaceId: string }) {
         </TabsList>
 
         {/* Campaigns Tab */}
-        <TabsContent value="campaigns" className="space-y-4">
+        <TabsContent value="campaigns" className="space-y-4" data-tour="marketing-campaigns">
           {campaigns.length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center">
@@ -295,7 +295,7 @@ export function MarketingView({ workspaceId }: { workspaceId: string }) {
         </TabsContent>
 
         {/* Segments Tab */}
-        <TabsContent value="segments" className="space-y-4">
+        <TabsContent value="segments" className="space-y-4" data-tour="marketing-segments">
           <SegmentBuilder
             value={segmentQuery}
             onChange={setSegmentQuery}

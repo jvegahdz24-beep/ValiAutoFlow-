@@ -26,6 +26,7 @@ import {
   Bot,
   Smartphone,
   Calendar,
+  Play,
 } from 'lucide-react'
 
 export type ViewType = 'dashboard' | 'conversations' | 'leads' | 'pipeline' | 'agents' | 'observability' | 'followups' | 'policies' | 'audit' | 'config' | 'marketing' | 'telegram' | 'whatsapp' | 'calendar'
@@ -76,7 +77,7 @@ function SidebarContent({
   return (
     <div className="flex h-full flex-col">
       {/* Logo */}
-      <div className={cn('flex items-center gap-3 border-b border-border/50 px-4 py-4', collapsed && 'justify-center px-2')}>
+      <div data-tour="sidebar-logo" className={cn('flex items-center gap-3 border-b border-border/50 px-4 py-4', collapsed && 'justify-center px-2')}>
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20">
           <Sparkles className="h-5 w-5 text-emerald-400" />
         </div>
@@ -90,7 +91,7 @@ function SidebarContent({
 
       {/* Navigation */}
       <ScrollArea className="flex-1 px-2 py-2">
-        <nav className="flex flex-col gap-1">
+        <nav data-tour="sidebar-nav" className="flex flex-col gap-1">
           {NAV_ITEMS.map((item) => {
             const isActive = activeView === item.id
             const Icon = item.icon
@@ -204,8 +205,10 @@ export function DashboardShell({ activeView, onViewChange, children, workspaceNa
           </div>
           <div className="flex items-center gap-2">
             {/* Notification Center */}
-            {workspaceId && <NotificationCenter workspaceId={workspaceId} />}
-            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <div data-tour="notification-center">
+              {workspaceId && <NotificationCenter workspaceId={workspaceId} />}
+            </div>
+            <div data-tour="system-status" className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs text-muted-foreground hidden sm:inline">System Active</span>
           </div>
         </header>

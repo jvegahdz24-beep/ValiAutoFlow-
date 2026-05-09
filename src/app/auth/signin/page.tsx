@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { Sparkles, Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import { Sparkles, Mail, Lock, Eye, EyeOff, Zap, Loader2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 
@@ -22,6 +22,7 @@ function SignInForm() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isDemoLoading, setIsDemoLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(
     error === 'CredentialsSignin'
       ? 'Email o contraseña incorrectos'
@@ -60,6 +61,53 @@ function SignInForm() {
     }
   }
 
+  const handleDemoLogin = async () => {
+    setIsDemoLoading(true)
+    setErrorMessage(null)
+
+    try {
+      // Step 1: Provision the demo account and workspace
+      const demoRes = await fetch('/api/auth/demo-login', { method: 'POST' })
+
+      if (!demoRes.ok) {
+        setErrorMessage('Error al preparar la cuenta demo')
+        return
+      }
+
+      const demoData = await demoRes.json()
+
+      if (!demoData.success || !demoData.credentials) {
+        setErrorMessage('Error al crear cuenta demo')
+        return
+      }
+
+      // Step 2: Sign in via NextAuth with the demo credentials
+      const result = await signIn('credentials', {
+        email: demoData.credentials.email,
+        password: demoData.credentials.password,
+        redirect: false,
+        callbackUrl: '/',
+      })
+
+      if (result?.ok) {
+        // Store demo workspace ID for the workspace hook
+        if (demoData.workspaceId) {
+          localStorage.setItem('valiautoflow_workspace_id', demoData.workspaceId)
+        }
+        // Mark as demo user for tour auto-start
+        localStorage.setItem('valiautoflow_demo_user', 'true')
+        router.push('/')
+        router.refresh()
+      } else {
+        setErrorMessage('Error al iniciar sesión demo')
+      }
+    } catch {
+      setErrorMessage('Error de conexión')
+    } finally {
+      setIsDemoLoading(false)
+    }
+  }
+
   const handleGoogleSignIn = () => {
     signIn('google', { callbackUrl })
   }
@@ -69,6 +117,7 @@ function SignInForm() {
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-1/2 -left-1/2 h-full w-full rounded-full bg-emerald-500/5 blur-3xl" />
         <div className="absolute -bottom-1/2 -right-1/2 h-full w-full rounded-full bg-emerald-500/5 blur-3xl" />
+        <div className="absolute top-1/4 right-1/4 h-64 w-64 rounded-full bg-purple-500/5 blur-3xl" />
       </div>
 
       <motion.div
@@ -89,7 +138,7 @@ function SignInForm() {
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-xl text-white">Iniciar Sesión</CardTitle>
             <CardDescription className="text-zinc-400">
-              Ingresa tus credenciales para acceder a tu workspace
+              Ingresa tus credenciales o prueba la demo en un clic
             </CardDescription>
           </CardHeader>
 
@@ -104,6 +153,35 @@ function SignInForm() {
               </motion.div>
             )}
 
+            {/* Demo Login Button - Featured */}
+            <Button
+              variant="default"
+              size="lg"
+              className="w-full mb-6 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold shadow-lg shadow-purple-500/20 transition-all duration-200 hover:shadow-purple-500/30 hover:scale-[1.02]"
+              onClick={handleDemoLogin}
+              disabled={isDemoLoading || isLoading}
+            >
+              {isDemoLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Preparando demo...
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Zap className="h-5 w-5" />
+                  Entrar como Demo (un clic)
+                </div>
+              )}
+            </Button>
+
+            <div className="relative my-4">
+              <Separator className="bg-zinc-700" />
+              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-zinc-900 px-3 text-xs text-zinc-500">
+                o inicia sesión
+              </span>
+            </div>
+
+            {/* Credentials Login Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-zinc-300">Email</Label>
@@ -117,7 +195,7 @@ function SignInForm() {
                     onChange={(e) => setEmail(e.target.value)}
                     className="border-zinc-700 bg-zinc-800/50 pl-10 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20"
                     required
-                    disabled={isLoading}
+                    disabled={isLoading || isDemoLoading}
                   />
                 </div>
               </div>
@@ -134,7 +212,7 @@ function SignInForm() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="border-zinc-700 bg-zinc-800/50 pl-10 pr-10 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20"
                     required
-                    disabled={isLoading}
+                    disabled={isLoading || isDemoLoading}
                   />
                   <button
                     type="button"
@@ -149,7 +227,7 @@ function SignInForm() {
               <Button
                 type="submit"
                 className="w-full bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
-                disabled={isLoading}
+                disabled={isLoading || isDemoLoading}
               >
                 {isLoading ? (
                   <div className="flex items-center gap-2">
@@ -162,7 +240,7 @@ function SignInForm() {
               </Button>
             </form>
 
-            <div className="relative my-6">
+            <div className="relative my-4">
               <Separator className="bg-zinc-700" />
               <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-zinc-900 px-3 text-xs text-zinc-500">
                 o continuar con
@@ -173,7 +251,7 @@ function SignInForm() {
               variant="outline"
               className="w-full border-zinc-700 bg-zinc-800/50 text-white hover:bg-zinc-700 hover:text-white transition-colors"
               onClick={handleGoogleSignIn}
-              disabled={isLoading}
+              disabled={isLoading || isDemoLoading}
             >
               <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />

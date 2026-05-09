@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Providers } from '@/components/providers'
 import { DashboardShell, type ViewType } from '@/components/dashboard/dashboard-shell'
 import { OverviewDashboard } from '@/components/dashboard/overview-dashboard'
@@ -17,13 +17,22 @@ import { MarketingView } from '@/components/dashboard/marketing-view'
 import { TelegramView } from '@/components/telegram/TelegramView'
 import { WhatsAppView } from '@/components/whatsapp/WhatsAppView'
 import CalendarSettings from '@/components/google/CalendarSettings'
+import { TourProvider, TourLauncher, useTour } from '@/components/tours/TourOverlay'
 import { useWorkspace } from '@/hooks/use-workspace'
 import { Sparkles } from 'lucide-react'
 import { motion } from 'framer-motion'
 
-function DashboardContent() {
+function DashboardInner() {
   const { workspaceId, isLoading } = useWorkspace()
   const [activeView, setActiveView] = useState<ViewType>('dashboard')
+  const { setViewChangeCallback } = useTour()
+
+  // Register view change callback for tour navigation
+  useEffect(() => {
+    setViewChangeCallback((view: ViewType) => {
+      setActiveView(view)
+    })
+  }, [setViewChangeCallback])
 
   if (isLoading || !workspaceId) {
     return (
@@ -70,21 +79,51 @@ function DashboardContent() {
       workspaceName="ValiAutoFlow Workspace"
       workspaceId={workspaceId}
     >
-      {activeView === 'dashboard' && <OverviewDashboard workspaceId={workspaceId} />}
-      {activeView === 'conversations' && <ConversationsView workspaceId={workspaceId} />}
-      {activeView === 'leads' && <LeadsView workspaceId={workspaceId} />}
-      {activeView === 'pipeline' && <PipelineView workspaceId={workspaceId} />}
-      {activeView === 'agents' && <AgentsView workspaceId={workspaceId} />}
+      {/* Tour launcher in the main area */}
+      <div className="flex items-center justify-end mb-2">
+        <TourLauncher currentView={activeView} />
+      </div>
+
+      <div data-tour="dashboard-view">
+        {activeView === 'dashboard' && <OverviewDashboard workspaceId={workspaceId} />}
+      </div>
+      <div data-tour="conversations-list">
+        {activeView === 'conversations' && <ConversationsView workspaceId={workspaceId} />}
+      </div>
+      <div data-tour="leads-table">
+        {activeView === 'leads' && <LeadsView workspaceId={workspaceId} />}
+      </div>
+      <div data-tour="pipeline-board">
+        {activeView === 'pipeline' && <PipelineView workspaceId={workspaceId} />}
+      </div>
+      <div data-tour="agents-list">
+        {activeView === 'agents' && <AgentsView workspaceId={workspaceId} />}
+      </div>
       {activeView === 'observability' && <ObservabilityView workspaceId={workspaceId} />}
       {activeView === 'followups' && <FollowupsView workspaceId={workspaceId} />}
       {activeView === 'policies' && <PoliciesView workspaceId={workspaceId} />}
       {activeView === 'audit' && <AuditView workspaceId={workspaceId} />}
-      {activeView === 'config' && <ConfigView workspaceId={workspaceId} />}
-      {activeView === 'marketing' && <MarketingView workspaceId={workspaceId} />}
+      <div data-tour="config-view">
+        {activeView === 'config' && <ConfigView workspaceId={workspaceId} />}
+      </div>
+      <div data-tour="marketing-view">
+        {activeView === 'marketing' && <MarketingView workspaceId={workspaceId} />}
+      </div>
       {activeView === 'telegram' && <TelegramView workspaceId={workspaceId} />}
       {activeView === 'whatsapp' && <WhatsAppView workspaceId={workspaceId} />}
       {activeView === 'calendar' && <CalendarSettings workspaceId={workspaceId} />}
     </DashboardShell>
+  )
+}
+
+function DashboardContent() {
+  const [activeView, setActiveView] = useState<ViewType>('dashboard')
+  const isDemoUser = typeof window !== 'undefined' && localStorage.getItem('valiautoflow_demo_user') === 'true'
+
+  return (
+    <TourProvider currentView={activeView} isDemoUser={isDemoUser}>
+      <DashboardInner />
+    </TourProvider>
   )
 }
 

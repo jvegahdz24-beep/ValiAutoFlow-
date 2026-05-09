@@ -49,3 +49,29 @@ Stage Summary:
 - 3 channel integrations (WhatsApp, Telegram, Google Calendar)
 - Full auth system with multi-workspace support
 - Production-ready for deploy to Vercel + Supabase
+---
+Task ID: 7
+Agent: Main Agent
+Task: Implement Demo Login + Guided Tours system for ValiAutoFlow
+
+Work Log:
+- Explored full project state: Prisma schema (35+ models), NextAuth v4, 42 API routes, dashboard with client-side view switching
+- Created `src/lib/demo/seed.ts` — Comprehensive seed function with 15 LATAM contacts, leads with cognitive states, 5 realistic WhatsApp conversations, 3 campaigns, pipeline with 7 stages, 3 calendar events, 6 notifications, follow-up sequence, 5 sales policies, 7 agents (7 Carnales), observability traces, and AI cost tracking
+- Created `src/app/api/auth/demo-login/route.ts` — Endpoint that provisions demo user + workspace + seed data, returns credentials for NextAuth signIn
+- Updated `src/app/auth/signin/page.tsx` — Added "Entrar como Demo (un clic)" button with gradient purple-blue styling, loading states, and auto-provisioning flow via NextAuth credentials
+- Updated `src/middleware.ts` — Added `/api/auth/demo-login` to public routes
+- Created `src/lib/tours/types.ts` — TourStep, TourDefinition, TourState types with localStorage persistence
+- Created `src/lib/tours/tours.ts` — 7 guided tours: Welcome, Dashboard, Conversations, Leads, Pipeline, Agents (7 Carnales), Marketing, Config — each with 2-5 steps with data-tour targets
+- Created `src/components/tours/TourOverlay.tsx` — Full tour system with: TourProvider context, SVG cutout overlay, animated tooltips, auto-start for demo users, progress dots, step navigation, dismiss/complete
+- Added data-tour attributes to 7 dashboard view components: overview-dashboard, conversations-view, leads-view, pipeline-view, agents-view, marketing-view, PoliciesStep
+- Added data-tour attributes to DashboardShell: sidebar-logo, sidebar-nav, notification-center, system-status
+- Integrated TourProvider + TourLauncher into main page (src/app/page.tsx)
+- Fixed ESLint react-hooks/set-state-in-effect errors by using state initializer functions instead of setState in effects
+- Fixed ESLint react-hooks/immutability error by reordering startTour declaration before its usage
+- Build: 0 errors, 43 API routes, lint clean
+
+Stage Summary:
+- Demo Login: Full flow working — button → provision → NextAuth signIn → dashboard with data
+- Tours: 7 guided tours with auto-start for demo users, manual start for all users
+- All builds and lint pass cleanly
+- 43 API routes registered (was 42, added /api/auth/demo-login)

@@ -62,6 +62,7 @@ export function AgentsView({ workspaceId }: { workspaceId: string }) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.08 }}
               className="sm:col-span-2 lg:col-span-1"
+              data-tour={carnal.key === 'JHON' ? 'agent-jhon' : carnal.key === 'ORCHESTRATOR' ? 'agent-orchestrator' : undefined}
             >
               <Card className={`border ${carnal.borderColor} ${carnal.bgColor} hover:shadow-lg transition-all overflow-hidden`}>
                 <CardContent className="p-4">

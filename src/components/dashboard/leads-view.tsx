@@ -148,7 +148,7 @@ export function LeadsView({ workspaceId }: { workspaceId: string }) {
                           {lead.status}
                         </Badge>
                       </td>
-                      <td className="p-3">
+                      <td data-tour="leads-temperature" className="p-3">
                         <TemperatureBadge temperature={lead.temperature} />
                       </td>
                       <td className="p-3 hidden lg:table-cell">
@@ -160,7 +160,7 @@ export function LeadsView({ workspaceId }: { workspaceId: string }) {
                       <td className="p-3 hidden lg:table-cell">
                         <span className="text-sm">${lead.dealValue.toLocaleString()}</span>
                       </td>
-                      <td className="p-3 hidden xl:table-cell">
+                      <td data-tour="leads-archetype" className="p-3 hidden xl:table-cell">
                         <Badge variant="outline" className="text-xs">
                           {lead.archetype.replace('_', ' ')}
                         </Badge>

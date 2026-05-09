@@ -1,0 +1,99 @@
+import { NextResponse } from "next/server"
+import { db } from "@/lib/db"
+import { seedDemoData } from "@/lib/demo/seed"
+
+const DEMO_EMAIL = "demo@valiautoflow.com"
+const DEMO_PASSWORD = "demo123"
+
+/**
+ * POST /api/auth/demo-login
+ *
+ * Creates or recovers a demo user + workspace with realistic data,
+ * then returns credentials so the client can sign in via NextAuth.
+ *
+ * This approach keeps auth flow consistent: we don't bypass NextAuth,
+ * we just auto-provision the demo account and let the client call signIn().
+ */
+export async function POST() {
+  try {
+    // 1. Find or create the demo user
+    let user = await db.user.findUnique({ where: { email: DEMO_EMAIL } })
+
+    if (!user) {
+      user = await db.user.create({
+        data: {
+          email: DEMO_EMAIL,
+          name: "Demo User",
+          password: DEMO_PASSWORD, // plaintext — demo only
+          role: "OWNER",
+          isActive: true,
+          emailVerified: new Date(),
+        },
+      })
+    }
+
+    // 2. Find or create the demo workspace
+    let workspace = await db.workspace.findFirst({
+      where: { slug: "demo-restaurante-la-casa" },
+    })
+
+    if (!workspace) {
+      workspace = await db.workspace.create({
+        data: {
+          name: "Restaurante La Casa",
+          slug: "demo-restaurante-la-casa",
+          plan: "PRO",
+          settings: JSON.stringify({ isDemo: true, demoCreatedAt: new Date().toISOString() }),
+        },
+      })
+
+      // Associate user as OWNER
+      const existingMembership = await db.workspaceMember.findUnique({
+        where: {
+          userId_workspaceId: {
+            userId: user.id,
+            workspaceId: workspace.id,
+          },
+        },
+      })
+
+      if (!existingMembership) {
+        await db.workspaceMember.create({
+          data: {
+            userId: user.id,
+            workspaceId: workspace.id,
+            role: "OWNER",
+            acceptedAt: new Date(),
+            isActive: true,
+          },
+        })
+      }
+
+      // Set user's default workspace
+      await db.user.update({
+        where: { id: user.id },
+        data: { workspaceId: workspace.id },
+      })
+
+      // Seed all demo data
+      await seedDemoData(workspace.id)
+    }
+
+    // 3. Return credentials so the client can authenticate via NextAuth
+    return NextResponse.json({
+      success: true,
+      credentials: {
+        email: DEMO_EMAIL,
+        password: DEMO_PASSWORD,
+      },
+      workspaceId: workspace.id,
+      isDemo: true,
+    })
+  } catch (error) {
+    console.error("Demo login error:", error)
+    return NextResponse.json(
+      { error: "Demo login failed", details: error instanceof Error ? error.message : "Unknown error" },
+      { status: 500 }
+    )
+  }
+}

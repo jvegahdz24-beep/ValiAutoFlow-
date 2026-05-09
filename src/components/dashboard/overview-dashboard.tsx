@@ -52,7 +52,7 @@ export function OverviewDashboard({ workspaceId }: { workspaceId: string }) {
   return (
     <div className="space-y-6">
       {/* Unified KPI Cards - Sales + Marketing */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div data-tour="dashboard-stats" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard title="Leads Totales" value={d.totalLeads} icon={Users} trend={12} />
         <StatCard title="Conversaciones Activas" value={d.activeConversations} icon={MessageSquare} trend={8} />
         <StatCard title="Tasa de Conversión" value={d.conversionRate} format="percent" icon={TrendingUp} trend={3.2} />
@@ -129,7 +129,7 @@ export function OverviewDashboard({ workspaceId }: { workspaceId: string }) {
       </div>
 
       {/* Charts Row */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div data-tour="dashboard-charts" className="grid gap-4 lg:grid-cols-3">
         {/* Lead Source Distribution */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <Card className="border-border/50 bg-card">

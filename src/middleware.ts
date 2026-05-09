@@ -5,6 +5,7 @@ import { NextResponse } from "next/server"
 const publicRoutes = [
   "/auth/signin",
   "/auth/register",
+  "/api/auth/demo-login",
   "/api/auth",
   "/api/whatsapp/webhook",
   "/api/telegram/webhook",

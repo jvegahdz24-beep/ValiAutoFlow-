@@ -98,7 +98,7 @@ export function PipelineView({ workspaceId }: { workspaceId: string }) {
                 {/* Deal Cards */}
                 <div className="space-y-2">
                   {stage.deals.map((deal: { id: string; title: string; value: number; probability: number; agentId: string | null }) => (
-                    <Card key={deal.id} className="border-border/50 bg-card hover:border-emerald-500/20 transition-colors cursor-pointer">
+                    <Card key={deal.id} data-tour="pipeline-deal" className="border-border/50 bg-card hover:border-emerald-500/20 transition-colors cursor-pointer">
                       <CardContent className="p-3">
                         <h4 className="text-sm font-medium mb-2 truncate">{deal.title}</h4>
                         <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
