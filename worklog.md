@@ -1,46 +1,34 @@
-# Worklog — ValiAutoFlow Task 1
+# ValiAutoFlow Worklog
 
-## Task: Update Prisma Schema, Rewrite JHON Agent, Create MARK Agent
+---
+Task ID: 1
+Agent: Main Agent
+Task: Build Configuration Wizard UI for ValiAutoFlow
 
-### Completed Items
+Work Log:
+- Explored existing project structure: found existing ConfigView (section-based), config API route, WorkspaceConfig Prisma model
+- Identified ambiguous route conflict between [id] and [workspaceId] API routes
+- Resolved by removing [id] directory and moving config route under [workspaceId]
+- Created 9 new component files in src/components/config/:
+  - ConfigWizard.tsx (main wizard container with step navigation, progress bar, animated transitions)
+  - shared/TimeSlotPicker.tsx (weekly day selector + time range picker)
+  - shared/DynamicList.tsx (reusable field array component with add/remove, max items)
+  - steps/BasicInfoStep.tsx (business name, rubro, timezone, schedule)
+  - steps/ProductsStep.tsx (dynamic products/services list with price + duration)
+  - steps/LeadFormulaStep.tsx (loss formula: volume keyword, conversion metric, ticket, funnel note with live preview)
+  - steps/CustomQuestionsStep.tsx (max 3 custom questions with stage selection)
+  - steps/PoliciesStep.tsx (toggle switches for show_price_early, auto_schedule, auto_followup, max_questions_per_turn)
+  - steps/ReviewActivateStep.tsx (full review summary + PUT to API + activation)
+- Updated config-view.tsx to use ConfigWizard instead of old section-based layout
+- Fixed TypeScript errors in config-view.tsx (type casting for Record<string, unknown>)
+- Updated API route params from {id} to {workspaceId} for consistency
+- Build passes cleanly, ESLint passes, no TS errors in new files
 
-1. **Prisma Schema Update** (`prisma/schema.prisma`)
-   - Added `WorkspaceConfig` model (business configuration, no-code setup)
-   - Added `Campaign` model (marketing campaigns)
-   - Added `CampaignMessage` model (campaign message tracking)
-   - Added `Segment` model (dynamic lead segmentation)
-   - Added `CalendarEvent` model (scheduling & calendar)
-   - Added relations to existing `Workspace` model:
-     - `workspaceConfig WorkspaceConfig?`
-     - `campaigns Campaign[]`
-     - `segments Segment[]`
-     - `calendarEvents CalendarEvent[]`
-   - Ran `bun run db:push` — database sync successful
-
-2. **JHON Agent Complete Rewrite** (`src/lib/engine/jhon.ts`)
-   - Implemented 3-Agent methodology:
-     - AGENTE 1 — DIAGNÓSTICO: "Detectar la fuga oculta"
-     - AGENTE 2 — ESTRATEGIA: "Traducir el problema en dinero perdido"
-     - AGENTE 3 — CIERRE: "Invitar a la siguiente decisión natural"
-   - Added `BusinessConfig` interface (injected by Orchestrator from WorkspaceConfig)
-   - New `generateResponse` signature with `businessConfig` and `answeredQuestions` params
-   - Returns `pendingQuestionsLeft` for tracking custom business questions
-   - Price redirect logic: never gives price in EXPLORATION, redirects to diagnosis
-   - Industry-specific diagnostic hooks (mecanica, clinica, restaurante, inmobiliaria, general)
-   - Loss quantification with financial narrative
-   - `getMasterPromptSection()` method for Prompt Compiler integration
-
-3. **MARK Agent Created** (`src/lib/engine/mark-agent.ts`)
-   - `MarketingAgent` class with:
-     - `segmentLeads()` — dynamic lead segmentation
-     - `shouldIntervene()` — intervention decision engine
-     - `generateMessage()` — strategy-based message generation (reactivation, win_back, nurture, welcome)
-     - `evaluateCampaignPerformance()` — campaign metrics evaluation
-     - `getMasterPromptSection()` — Prompt Compiler integration
-   - Exported `CampaignConfig` and `SegmentResult` interfaces
-
-4. **Engine Index Updated** (`src/lib/engine/index.ts`)
-   - Added `MarketingAgent` export
-   - Added `BusinessConfig`, `CampaignConfig`, `SegmentResult` type exports
-
-5. **Lint Check**: `bun run lint` — passed with zero errors
+Stage Summary:
+- Complete 6-step wizard UI built for business configuration
+- Uses react-hook-form with FormProvider for form state management
+- Animated step transitions with framer-motion
+- Progress bar and step indicators with completion states
+- Responsive design with mobile navigation support
+- API integration: GET config on load, PUT config on activation
+- All data flows through /api/workspaces/[workspaceId]/config

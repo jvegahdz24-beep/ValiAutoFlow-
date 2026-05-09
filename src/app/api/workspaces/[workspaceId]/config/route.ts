@@ -1,8 +1,8 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export async function GET(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
+  const { workspaceId: id } = await params
   try {
     let config = await db.workspaceConfig.findUnique({ where: { workspaceId: id } })
     if (!config) {
@@ -15,8 +15,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
+  const { workspaceId: id } = await params
   try {
     const body = await request.json()
 
