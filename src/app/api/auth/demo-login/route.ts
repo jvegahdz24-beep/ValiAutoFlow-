@@ -5,6 +5,8 @@ import { checkRateLimit, getClientIdentifier } from "@/lib/security"
 
 const DEMO_EMAIL = "demo@valiautoflow.com"
 const DEMO_PASSWORD = "demo123"
+// Pre-hashed bcrypt password for demo user (avoids plaintext fallback issues)
+const DEMO_PASSWORD_HASH = "$2b$12$3mZ.lSTyf/hWYWN4xOOzG.m/XIB/DTaG3K8tyjuVgQrwSKI26fk1q"
 
 /**
  * POST /api/auth/demo-login
@@ -37,7 +39,7 @@ export async function POST(request: NextRequest) {
         data: {
           email: DEMO_EMAIL,
           name: "Demo User",
-          password: DEMO_PASSWORD, // plaintext — demo only
+          password: DEMO_PASSWORD_HASH, // bcrypt-hashed — secure for production
           role: "OWNER",
           isActive: true,
           emailVerified: new Date(),
