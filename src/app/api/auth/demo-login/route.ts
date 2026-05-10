@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Demo login error:", error)
     return NextResponse.json(
-      { error: "Demo login failed", details: error instanceof Error ? error.message : "Unknown error" },
+      { error: "Demo login failed" },
       { status: 500 }
     )
   }

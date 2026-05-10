@@ -39,7 +39,7 @@ export default withAuth(
     const supabaseResponse = await updateSession(req)
 
     // Allow public routes
-    if (publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/') || (route !== '/' && pathname.startsWith(route)))) {
+    if (publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/'))) {
       // If user is already authenticated and visiting auth pages, redirect to dashboard
       if (token && authRoutes.some((route) => pathname.startsWith(route))) {
         const url = req.nextUrl.clone()
@@ -57,8 +57,8 @@ export default withAuth(
 
     // Check if user is authenticated
     if (!token) {
-      // In development mode, allow access without auth if no users exist yet
-      if (process.env.NODE_ENV === 'development') {
+      // Only allow auth bypass if explicitly enabled via AUTH_BYPASS env var
+      if (process.env.AUTH_BYPASS === 'true') {
         return supabaseResponse
       }
       const signInUrl = new URL("/auth/signin", req.url)
@@ -96,12 +96,12 @@ export default withAuth(
         const { pathname } = req.nextUrl
 
         // Allow public routes without authentication
-        if (publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/') || (route !== '/' && pathname.startsWith(route)))) {
+        if (publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/'))) {
           return true
         }
 
-        // In development, allow everything (auth is optional)
-        if (process.env.NODE_ENV === 'development') {
+        // Only allow auth bypass if explicitly enabled via AUTH_BYPASS env var
+        if (process.env.AUTH_BYPASS === 'true') {
           return true
         }
 

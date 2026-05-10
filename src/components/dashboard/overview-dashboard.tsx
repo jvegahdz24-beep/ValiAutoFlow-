@@ -1,18 +1,17 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { StatCard, StageBadge, TemperatureBadge, CARNALES, CarnalIcon, ChannelIcon } from './shared'
+import { StatCard, StageBadge, TemperatureBadge, CARNALES, ChannelIcon } from './shared'
 import { useDashboard } from '@/hooks/use-dashboard'
 import { useConversations } from '@/hooks/use-conversations'
 import { motion } from 'framer-motion'
 import {
   Users, MessageSquare, TrendingUp, DollarSign, Activity,
-  Megaphone, Send, CalendarCheck, AlertTriangle, Bell,
+  Megaphone, CalendarCheck, AlertTriangle, Bell,
 } from 'lucide-react'
 import {
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line,
+  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 
 const PIE_COLORS = ['#34D399', '#38BDF8', '#F472B6', '#A78BFA']

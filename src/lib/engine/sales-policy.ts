@@ -13,7 +13,7 @@ export class SalesPolicyEngine {
   }
 
   getActivePolicies(): string[] {
-    return this.policies.filter(p => true).map(p => p.ruleType);
+    return this.policies.filter(_p => true).map(p => p.ruleType);
   }
 
   validate(

@@ -2,7 +2,7 @@
 
 import { useFormContext, useFieldArray } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus } from 'lucide-react'
 
 interface DynamicListProps {
   name: string

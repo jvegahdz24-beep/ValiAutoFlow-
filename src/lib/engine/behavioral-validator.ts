@@ -9,8 +9,8 @@ export class BehavioralValidator {
   validate(
     response: string,
     stage: string,
-    conversationHistory: string[],
-    policiesApplied: string[]
+    _conversationHistory: string[],
+    _policiesApplied: string[]
   ): BehavioralValidationResult {
     const violations: BehavioralViolation[] = [];
 

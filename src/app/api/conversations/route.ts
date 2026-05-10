@@ -1,13 +1,8 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
-import { getServerSession } from '@/lib/auth'
+import { requireWorkspaceAccess } from '@/lib/auth'
 
 export async function GET(request: Request) {
-  const session = await getServerSession()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
-
   const { searchParams } = new URL(request.url)
   const workspaceId = searchParams.get('workspaceId')
 
@@ -15,16 +10,36 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'workspaceId required' }, { status: 400 })
   }
 
-  const conversations = await db.conversation.findMany({
-    where: { workspaceId },
-    include: {
-      lead: true,
-      messages: { orderBy: { createdAt: 'desc' } },
-      toolActions: true,
-      behavioralTraces: true,
-    },
-    orderBy: { lastMessageAt: 'desc' },
-  })
+  try {
+    await requireWorkspaceAccess(workspaceId)
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
 
-  return NextResponse.json(conversations)
+  try {
+    const conversations = await db.conversation.findMany({
+      where: { workspaceId },
+      include: {
+        lead: true,
+        messages: { orderBy: { createdAt: 'desc' } },
+        toolActions: true,
+        behavioralTraces: true,
+      },
+      orderBy: { lastMessageAt: 'desc' },
+    })
+
+    return NextResponse.json(conversations)
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    console.error('[Conversations] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }

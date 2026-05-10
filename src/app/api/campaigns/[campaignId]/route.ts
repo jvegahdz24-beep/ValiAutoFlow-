@@ -1,8 +1,8 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from '@/lib/auth'
+import { getServerSession, requireWorkspaceAccess } from '@/lib/auth'
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ campaignId: string }> }) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ campaignId: string }> }) {
   try {
     const session = await getServerSession()
     if (!session?.user) {
@@ -15,8 +15,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       include: { campaignMessages: { take: 50, orderBy: { createdAt: 'desc' } } },
     })
     if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+
+    // Verify workspace access
+    await requireWorkspaceAccess(campaign.workspaceId)
+
     return NextResponse.json({ campaign })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
     return NextResponse.json({ error: 'Failed to fetch campaign' }, { status: 500 })
   }
 }
@@ -30,6 +40,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const { campaignId } = await params
     const body = await request.json()
+
+    // Verify the campaign belongs to user's workspace
+    const existing = await db.campaign.findUnique({ where: { id: campaignId } })
+    if (!existing) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+    await requireWorkspaceAccess(existing.workspaceId)
+
     const updateData: Record<string, unknown> = {}
     if (body.name !== undefined) updateData.name = body.name
     if (body.description !== undefined) updateData.description = body.description
@@ -45,7 +61,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const campaign = await db.campaign.update({ where: { id: campaignId }, data: updateData })
     return NextResponse.json({ campaign })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
     return NextResponse.json({ error: 'Failed to update campaign' }, { status: 500 })
   }
 }

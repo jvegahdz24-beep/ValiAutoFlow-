@@ -25,21 +25,11 @@ import {
   type CognitiveStateInput,
   type PipelineResult,
   type SalesPolicyRule,
-  type MemoryPacket,
-  type CarnalType,
 } from './types';
 
-const DEFAULT_MEMORY: MemoryPacket = {
-  conversational: 'Sin historial previo.',
-  commercial: 'Sin historial comercial.',
-  operational: 'Sin historial operacional.',
-};
-
 export class Orchestrator {
-  private stageDetector: ConversationStageDetector;
   private stateResolver: CognitiveStateResolver;
   private promptCompiler: PromptCompiler;
-  private policyEngine: SalesPolicyEngine;
   private behavioralValidator: BehavioralValidator;
   private responseEvaluator: ResponseEvaluator;
   private jhon: JHONAgent;
@@ -47,13 +37,25 @@ export class Orchestrator {
   private memoryEngine: MemoryEngine;
   private followUpEngine: FollowUpEngine;
   private observabilityEngine: ObservabilityEngine;
-  private toolOS: ToolOS;
+
+  // Reserved for future pipeline expansion (policy checks, tool invocations, stage detection)
+  // These are instantiated eagerly so the full 7-Carnal pipeline can be wired incrementally.
+  private _stageDetector: ConversationStageDetector;
+  private _policyEngine: SalesPolicyEngine;
+  private _toolOS: ToolOS;
+
+  /** Access the stage detector (reserved for future pipeline stages) */
+  get stageDetector() { return this._stageDetector; }
+  /** Access the sales policy engine (reserved for future pipeline stages) */
+  get policyEngine() { return this._policyEngine; }
+  /** Access the tool OS (reserved for future pipeline stages) */
+  get toolOS() { return this._toolOS; }
 
   constructor(policies?: SalesPolicyRule[]) {
-    this.stageDetector = new ConversationStageDetector();
+    this._stageDetector = new ConversationStageDetector();
     this.stateResolver = new CognitiveStateResolver();
     this.promptCompiler = new PromptCompiler();
-    this.policyEngine = new SalesPolicyEngine(policies || []);
+    this._policyEngine = new SalesPolicyEngine(policies || []);
     this.behavioralValidator = new BehavioralValidator();
     this.responseEvaluator = new ResponseEvaluator();
     this.jhon = new JHONAgent();
@@ -61,7 +63,7 @@ export class Orchestrator {
     this.memoryEngine = new MemoryEngine();
     this.followUpEngine = new FollowUpEngine();
     this.observabilityEngine = new ObservabilityEngine();
-    this.toolOS = new ToolOS();
+    this._toolOS = new ToolOS();
   }
 
   /**
@@ -237,13 +239,13 @@ export class Orchestrator {
     );
 
     if (followUpCheck.shouldFollowUp) {
-      const followUpMessage = this.followUpEngine.generateFollowUp(
+      this.followUpEngine.generateFollowUp(
         routing.stage,
         cognitiveState.archetype,
         memory,
         0 // previous attempts
       );
-      // Include follow-up suggestion in metadata
+      // Follow-up suggestion included in pipeline metadata
     }
 
     // ──────────────────────────────────────────────────────────
@@ -280,7 +282,7 @@ export class Orchestrator {
 
   // ---- HELPERS ----
 
-  private getObjectiveForStage(stage: ConversationStageType, intention: string): string {
+  private getObjectiveForStage(stage: ConversationStageType, _intention: string): string {
     const objectives: Record<ConversationStageType, string> = {
       EXPLORATION: 'Identificar el dolor principal del lead',
       INTEREST: 'Mostrar el costo de no actuar y conectar dolor con solución',
@@ -292,7 +294,7 @@ export class Orchestrator {
     return objectives[stage] ?? 'Avanzar la conversación';
   }
 
-  private generateSafeResponse(stage: ConversationStageType, archetype: string): string {
+  private generateSafeResponse(stage: ConversationStageType, _archetype: string): string {
     const safeResponses: Record<ConversationStageType, string> = {
       EXPLORATION: 'Cuéntame más sobre tu situación actual. ¿Qué es lo que más te preocupa?',
       INTEREST: '¿Has considerado qué pasaría si sigues igual los próximos 3 meses?',
@@ -304,7 +306,7 @@ export class Orchestrator {
     return safeResponses[stage] ?? safeResponses.EXPLORATION;
   }
 
-  private shouldEscalate(cognitiveState: CognitiveStateInput, stage: string, violations: string[]): boolean {
+  private shouldEscalate(cognitiveState: CognitiveStateInput, _stage: string, violations: string[]): boolean {
     if (cognitiveState.temperature === 'HOT' && cognitiveState.churnRisk > 0.7) return true;
     if (cognitiveState.intentScore < 0.2 && cognitiveState.priority >= 7) return true;
     if (violations.filter(v => v.includes('HIGH')).length >= 2) return true;

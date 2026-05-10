@@ -32,7 +32,7 @@ export class MemoryEngine {
    */
   replayCognitive(
     messages: { content: string; direction: string; createdAt: Date }[],
-    stateTransitions: { fromStage: string; toStage: string; trigger: string }[],
+    _stateTransitions: { fromStage: string; toStage: string; trigger: string }[],
     upToIndex?: number
   ): {
     state: CognitiveStateInput;

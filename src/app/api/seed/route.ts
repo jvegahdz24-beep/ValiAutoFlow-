@@ -428,6 +428,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ workspaceId: workspace.id })
   } catch (error) {
     console.error('Seed error:', error)
-    return NextResponse.json({ error: 'Failed to seed', details: error instanceof Error ? error.message : String(error) }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to seed' }, { status: 500 })
   }
 }

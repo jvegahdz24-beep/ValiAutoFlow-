@@ -24,12 +24,15 @@ const DEFAULT_JHON: JHONConfig = {
 };
 
 export class PromptCompiler {
-  private config: JHONConfig;
+  private _config: JHONConfig;
   private jhonMasterPrompt: string;
   private markMasterPrompt: string;
 
+  /** Access the current JHON configuration */
+  get config() { return this._config; }
+
   constructor(config?: Partial<JHONConfig>, jhonMasterPrompt?: string, markMasterPrompt?: string) {
-    this.config = { ...DEFAULT_JHON, ...config };
+    this._config = { ...DEFAULT_JHON, ...config };
     this.jhonMasterPrompt = jhonMasterPrompt || '';
     this.markMasterPrompt = markMasterPrompt || '';
   }

@@ -117,7 +117,7 @@ function DashboardInner() {
 }
 
 function DashboardContent() {
-  const [activeView, setActiveView] = useState<ViewType>('dashboard')
+  const [activeView, _setActiveView] = useState<ViewType>('dashboard')
   const isDemoUser = typeof window !== 'undefined' && localStorage.getItem('valiautoflow_demo_user') === 'true'
 
   return (

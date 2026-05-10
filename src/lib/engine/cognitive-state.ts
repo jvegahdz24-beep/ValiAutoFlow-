@@ -3,7 +3,7 @@
 // Builds the real cognitive state of a lead
 // ============================================================
 
-import { type CognitiveStateInput, type LeadTemperature, type LeadArchetype, type ConversationStageType } from './types';
+import { type CognitiveStateInput, type LeadTemperature, type LeadArchetype } from './types';
 
 export class CognitiveStateResolver {
   resolve(

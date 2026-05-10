@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, requireWorkspaceAccess } from '@/lib/auth';
 
 // GET /api/conversations/[conversationId]/messages — List messages (paginated)
 export async function GET(
@@ -27,6 +27,9 @@ export async function GET(
         { status: 404 }
       );
     }
+
+    // Verify workspace access
+    await requireWorkspaceAccess(conversation.workspaceId);
 
     const where: Record<string, unknown> = { conversationId };
 
@@ -55,7 +58,13 @@ export async function GET(
         limit,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[MESSAGES_LIST]', error);
     return NextResponse.json(
       { error: 'Failed to fetch messages' },
@@ -96,6 +105,9 @@ export async function POST(
         { status: 404 }
       );
     }
+
+    // Verify workspace access
+    await requireWorkspaceAccess(conversation.workspaceId);
 
     // Create message
     const message = await db.message.create({
@@ -139,7 +151,13 @@ export async function POST(
     // For now, we just create the message and return it
 
     return NextResponse.json({ message }, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[MESSAGE_CREATE]', error);
     return NextResponse.json(
       { error: 'Failed to create message' },

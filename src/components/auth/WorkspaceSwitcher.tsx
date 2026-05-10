@@ -14,7 +14,6 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
-  Building2,
   Check,
   ChevronsUpDown,
   Plus,
@@ -37,7 +36,7 @@ interface WorkspaceSwitcherProps {
 }
 
 export function WorkspaceSwitcher({ userId, currentWorkspaceId }: WorkspaceSwitcherProps) {
-  const { data: session, update: updateSession } = useSession()
+  const { data: _session, update: updateSession } = useSession()
   const router = useRouter()
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [isLoading, setIsLoading] = useState(true)

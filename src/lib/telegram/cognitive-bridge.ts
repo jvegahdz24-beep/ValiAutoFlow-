@@ -23,7 +23,7 @@ export async function notifyHumanTakeoverNeeded(params: {
   temperature: string
   lastMessage: string
 }): Promise<boolean> {
-  const { workspaceId, conversationId, leadId, contactName, reason, currentStage, temperature, lastMessage } = params
+  const { workspaceId, conversationId, leadId: _leadId, contactName, reason, currentStage, temperature, lastMessage } = params
 
   // Get active bot config
   const botConfig = await db.telegramBotConfig.findUnique({
@@ -90,7 +90,7 @@ export async function notifyHotLead(params: {
   currency: string
   source: string
 }): Promise<boolean> {
-  const { workspaceId, leadId, contactName, score, dealValue, currency, source } = params
+  const { workspaceId, leadId: _leadId, contactName, score, dealValue, currency, source } = params
 
   const botConfig = await db.telegramBotConfig.findUnique({
     where: { workspaceId },

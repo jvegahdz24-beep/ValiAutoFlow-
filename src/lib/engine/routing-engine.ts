@@ -5,8 +5,6 @@
 
 import {
   type ConversationStageType,
-  type LeadTemperature,
-  type LeadArchetype,
   type CognitiveStateInput,
   type CarnalType,
   type UrgencyLevel,
@@ -216,7 +214,7 @@ export class RoutingEngine {
 
   // ---- ROUTING ----
 
-  private routeToAgent(stage: string, riskOfDrop: number, intention: string): CarnalType {
+  private routeToAgent(stage: string, riskOfDrop: number, _intention: string): CarnalType {
     // High risk of drop → FOLLOWUP engine (recovery mode)
     if (riskOfDrop > 0.7) return 'FOLLOWUP';
 
@@ -236,7 +234,7 @@ export class RoutingEngine {
 
   private shouldEscalateToHuman(
     cognitiveState: CognitiveStateInput | null,
-    stage: string,
+    _stage: string,
     riskOfDrop: number,
     message: string
   ): boolean {

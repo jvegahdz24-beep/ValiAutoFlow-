@@ -46,7 +46,6 @@ interface CircuitBreakerState {
 
 const FAILURE_THRESHOLD = 5          // Open circuit after 5 consecutive failures
 const RESET_TIMEOUT_MS = 30_000     // Try again after 30 seconds
-const HALF_OPEN_MAX_CALLS = 1       // Allow 1 test call in half-open state
 
 const circuitBreakers = new Map<string, CircuitBreakerState>()
 

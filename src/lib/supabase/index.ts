@@ -12,9 +12,9 @@
 // ============================================================
 
 // Re-export the shadcn-generated clients for convenience
-export { createClient as useSupabaseBrowser } from './supabase/client'
-export { createClient as createSupabaseServerClient } from './supabase/server'
-export { updateSession } from './supabase/middleware'
+export { createClient as useSupabaseBrowser } from './client'
+export { createClient as createSupabaseServerClient } from './server'
+export { updateSession } from './middleware'
 
 // Legacy browser singleton (for backwards compatibility with existing code)
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'

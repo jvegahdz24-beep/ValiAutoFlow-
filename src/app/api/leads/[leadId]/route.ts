@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, requireWorkspaceAccess } from '@/lib/auth';
 
 // GET /api/leads/[leadId] — Get lead details
 export async function GET(
@@ -54,8 +54,17 @@ export async function GET(
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 
+    // Verify workspace access
+    await requireWorkspaceAccess(lead.workspaceId);
+
     return NextResponse.json({ lead });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[LEAD_GET]', error);
     return NextResponse.json(
       { error: 'Failed to fetch lead' },
@@ -92,6 +101,9 @@ export async function PATCH(
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
+
+    // Verify workspace access
+    await requireWorkspaceAccess(lead.workspaceId);
 
     // Track state transition if status changed
     if (status && status !== lead.status) {
@@ -142,7 +154,13 @@ export async function PATCH(
     });
 
     return NextResponse.json({ lead: updated });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[LEAD_UPDATE]', error);
     return NextResponse.json(
       { error: 'Failed to update lead' },

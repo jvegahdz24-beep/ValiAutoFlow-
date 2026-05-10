@@ -2,10 +2,9 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { Activity, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { Activity, Clock, CheckCircle, XCircle } from 'lucide-react'
 
 export function FollowupsView({ workspaceId }: { workspaceId: string }) {
   const { data: followups, isLoading } = useQuery({

@@ -6,9 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
-import { StageBadge, TemperatureBadge, ChannelIcon, CarnalIcon, getCarnalConfig, CognitiveGauge } from './shared'
 import { useConversations, type Conversation, type Message } from '@/hooks/use-conversations'
+import { StageBadge, TemperatureBadge, ChannelIcon, CarnalIcon, getCarnalConfig, CognitiveGauge } from './shared'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -343,7 +342,7 @@ function ConversationDetail({
           </CardHeader>
           <CardContent>
             <div className="space-y-1">
-              {['ORCHESTRATOR', 'ROUTING', 'MEMORY', 'JHON', 'OBSERVABILITY', 'TOOL_OS', 'FOLLOWUP'].map((carnal, i) => {
+              {['ORCHESTRATOR', 'ROUTING', 'MEMORY', 'JHON', 'OBSERVABILITY', 'TOOL_OS', 'FOLLOWUP'].map((carnal, _i) => {
                 const config = getCarnalConfig(carnal)
                 if (!config) return null
                 const Icon = config.icon

@@ -1,15 +1,19 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from '@/lib/auth'
+import { requireWorkspaceAccess } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
-  const session = await getServerSession()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
-
   const workspaceId = request.nextUrl.searchParams.get('workspaceId')
   if (!workspaceId) return NextResponse.json({ error: 'workspaceId required' }, { status: 400 })
+
+  try {
+    await requireWorkspaceAccess(workspaceId)
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
 
   try {
     const campaigns = await db.campaign.findMany({
@@ -18,18 +22,24 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
     return NextResponse.json({ campaigns })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
     return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
     const body = await request.json()
+    if (!body.workspaceId) {
+      return NextResponse.json({ error: 'workspaceId required' }, { status: 400 })
+    }
+    await requireWorkspaceAccess(body.workspaceId)
     const campaign = await db.campaign.create({
       data: {
         workspaceId: body.workspaceId,
@@ -43,7 +53,13 @@ export async function POST(request: NextRequest) {
       },
     })
     return NextResponse.json({ campaign }, { status: 201 })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
     return NextResponse.json({ error: 'Failed to create campaign' }, { status: 500 })
   }
 }

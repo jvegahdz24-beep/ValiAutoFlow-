@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { requireWorkspaceAccess } from '@/lib/auth';
 
 // GET /api/workspaces/[workspaceId] — Get workspace details
 export async function GET(
@@ -8,11 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
   try {
-    const session = await getServerSession();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
     const { workspaceId } = await params;
+    await requireWorkspaceAccess(workspaceId);
 
     const workspace = await db.workspace.findUnique({
       where: { id: workspaceId },
@@ -40,7 +37,13 @@ export async function GET(
     }
 
     return NextResponse.json({ workspace });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[WORKSPACE_GET]', error);
     return NextResponse.json(
       { error: 'Failed to fetch workspace' },
@@ -55,11 +58,8 @@ export async function PATCH(
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
   try {
-    const session = await getServerSession();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
     const { workspaceId } = await params;
+    await requireWorkspaceAccess(workspaceId);
     const body = await request.json();
     const { name, slug, plan, settings } = body;
 
@@ -96,7 +96,13 @@ export async function PATCH(
     });
 
     return NextResponse.json({ workspace: updated });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[WORKSPACE_UPDATE]', error);
     return NextResponse.json(
       { error: 'Failed to update workspace' },

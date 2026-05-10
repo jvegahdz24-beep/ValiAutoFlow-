@@ -14,7 +14,7 @@ import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { useState } from 'react'
 import {
-  Smartphone, Shield, Send, Activity, CheckCircle2, XCircle, Plus, Loader2,
+  Smartphone, Shield, Send, Activity, CheckCircle2, XCircle, Loader2,
   ExternalLink, Trash2, MessageSquare,
 } from 'lucide-react'
 

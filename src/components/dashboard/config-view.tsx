@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { Settings, Sparkles } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import { motion } from 'framer-motion'
 import ConfigWizard from '@/components/config/ConfigWizard'
 

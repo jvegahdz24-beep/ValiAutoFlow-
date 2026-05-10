@@ -5,9 +5,9 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { X, ChevronLeft, ChevronRight, Play, Sparkles } from 'lucide-react'
-import type { TourDefinition, TourStep, TourState } from '@/lib/tours/types'
+import type { TourDefinition, TourState } from '@/lib/tours/types'
 import { TOUR_STORAGE_KEY } from '@/lib/tours/types'
-import { TOURS, getTour, getToursForView, getAutoStartTours } from '@/lib/tours/tours'
+import { getTour, getToursForView, getAutoStartTours } from '@/lib/tours/tours'
 import type { ViewType } from '@/components/dashboard/dashboard-shell'
 
 // ============================================================
@@ -121,6 +121,7 @@ export function TourProvider({ children, currentView, isDemoUser }: TourProvider
       }, 1500)
       return () => clearTimeout(timer)
     }
+    return undefined
   }, [isClient, isDemoUser, tourState.activeTourId, tourState.dismissed, tourState.completedTours, startTour])
 
   const endTour = useCallback(() => {
@@ -437,7 +438,7 @@ interface TourLauncherProps {
   className?: string
 }
 
-export function TourLauncher({ tourId, currentView, className }: TourLauncherProps) {
+export function TourLauncher({ tourId, currentView: _currentView, className }: TourLauncherProps) {
   const { startTour, isTourActive, availableTours, isTourCompleted } = useTour()
 
   if (isTourActive) return null

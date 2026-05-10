@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Return the challenge string as plain text
-    console.log('[WhatsApp Webhook] GET — Verification successful for workspace:', config.workspaceId)
+    console.error('[WhatsApp Webhook] GET — Verification successful for workspace:', config.workspaceId)
     return new NextResponse(challenge || '', {
       status: 200,
       headers: { 'Content-Type': 'text/plain' },
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
         })
 
         if (existingMessage) {
-          console.log(`[WhatsApp Webhook] Duplicate messageId: ${incomingMessage.messageId}. Skipping.`)
+          console.error(`[WhatsApp Webhook] Duplicate messageId: ${incomingMessage.messageId}. Skipping.`)
           return NextResponse.json({ status: 'ok' }, { status: 200 })
         }
       }
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Neither message nor status — could be a system event or unknown payload
-    console.log('[WhatsApp Webhook] POST — Unrecognized payload, object:', body.object)
+    console.error('[WhatsApp Webhook] POST — Unrecognized payload, object:', body.object)
     return NextResponse.json({ status: 'ok' }, { status: 200 })
   } catch (error) {
     // ALWAYS return 200 to Meta, even on errors
@@ -305,7 +305,7 @@ async function handleIncomingMessage(
           },
         })
 
-        console.log(`[WhatsApp Webhook] Contact ${contact.id} opted out via "${optOutResult.keyword}"`)
+        console.error(`[WhatsApp Webhook] Contact ${contact.id} opted out via "${optOutResult.keyword}"`)
         return
       }
     }
@@ -313,7 +313,7 @@ async function handleIncomingMessage(
     // ──────────────────────────────────────────────────────────
     // STEP 6: Create the inbound message
     // ──────────────────────────────────────────────────────────
-    const inboundMessage = await db.message.create({
+    await db.message.create({
       data: {
         conversationId: conversation.id,
         direction: 'INBOUND',
@@ -367,7 +367,7 @@ async function handleIncomingMessage(
       // Don't throw — we still return 200 to Meta
     }
 
-    console.log(
+    console.error(
       `[WhatsApp Webhook] Message processed: ${parsed.messageId} from ${parsed.from} in workspace ${workspaceId}`
     )
   } catch (error) {
@@ -423,7 +423,7 @@ async function handleStatusUpdate(
     } else {
       // Message not found in our DB — could be a status for a message
       // sent outside our system. Log it for debugging.
-      console.log(
+      console.error(
         `[WhatsApp Webhook] Status update for unknown message: ${parsed.messageId} → ${parsed.status}`
       )
     }

@@ -6,6 +6,7 @@
 // ============================================================
 
 import { z } from 'zod'
+import { NextResponse } from 'next/server'
 
 // ── Auth ────────────────────────────────────────────────────
 
@@ -138,8 +139,6 @@ export const leadUpdateSchema = z.object({
 })
 
 // ── Helper ──────────────────────────────────────────────────
-
-import { NextResponse } from 'next/server'
 
 /**
  * Validate request body against a Zod schema.

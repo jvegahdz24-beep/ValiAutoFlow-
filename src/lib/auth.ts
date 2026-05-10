@@ -6,7 +6,6 @@ import { db } from "@/lib/db"
  * Must be called from Server Components or API routes
  */
 export async function getServerSession(): Promise<Session | null> {
-  const { default: NextAuth } = await import("next-auth")
   const { authOptions } = await import("@/app/api/auth/[...nextauth]/route")
   return nextAuthGetServerSession(authOptions)
 }

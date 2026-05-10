@@ -1,16 +1,12 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from '@/lib/auth'
+import { requireWorkspaceAccess } from '@/lib/auth'
 
 // POST - Build/preview a segment (count leads matching conditions)
 export async function POST(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
   try {
-    const session = await getServerSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
-
     const { workspaceId } = await params
+    await requireWorkspaceAccess(workspaceId)
     const body = await request.json()
     const { conditions } = body
 
@@ -29,7 +25,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     ])
 
     return NextResponse.json({ count, leads })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
     return NextResponse.json({ error: 'Failed to build segment' }, { status: 500 })
   }
 }

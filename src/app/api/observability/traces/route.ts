@@ -1,13 +1,8 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
-import { getServerSession } from '@/lib/auth'
+import { requireWorkspaceAccess } from '@/lib/auth'
 
 export async function GET(request: Request) {
-  const session = await getServerSession()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
-
   const { searchParams } = new URL(request.url)
   const workspaceId = searchParams.get('workspaceId')
 
@@ -15,11 +10,31 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'workspaceId required' }, { status: 400 })
   }
 
-  const traces = await db.observabilityTrace.findMany({
-    where: { workspaceId },
-    orderBy: { createdAt: 'desc' },
-    take: 100,
-  })
+  try {
+    await requireWorkspaceAccess(workspaceId)
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
 
-  return NextResponse.json(traces)
+  try {
+    const traces = await db.observabilityTrace.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    })
+
+    return NextResponse.json(traces)
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    console.error('[Observability/Traces] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }

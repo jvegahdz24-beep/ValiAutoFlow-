@@ -13,7 +13,7 @@
 // ============================================================
 
 import { db } from '@/lib/db'
-import { sendMessage, sendTemplateMessage, isValidPhoneNumber, normalizePhoneNumber, getMetaErrorDescription } from './client'
+import { sendMessage, sendTemplateMessage, normalizePhoneNumber, getMetaErrorDescription } from './client'
 
 // ============================================================
 // CONSTANTS
@@ -64,7 +64,7 @@ async function isWithin24HourWindow(conversationId: string): Promise<boolean> {
  */
 async function getApprovedTemplate(
   workspaceId: string,
-  purpose: 'followup' | 'reactivation' = 'followup'
+  _purpose: 'followup' | 'reactivation' = 'followup'
 ): Promise<{ name: string; language: string; body: string } | null> {
   const template = await db.whatsAppTemplate.findFirst({
     where: {

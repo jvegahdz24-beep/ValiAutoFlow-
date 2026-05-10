@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { requireWorkspaceAccess } from '@/lib/auth';
 
 /**
  * Helper to mask sensitive fields in the GoogleCalendarConfig response.
@@ -36,12 +36,8 @@ export async function GET(
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
   try {
-    const session = await getServerSession();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
     const { workspaceId } = await params;
+    await requireWorkspaceAccess(workspaceId);
 
     const config = await db.googleCalendarConfig.findUnique({
       where: { workspaceId },
@@ -57,7 +53,13 @@ export async function GET(
     return NextResponse.json({
       config: maskConfig(config as unknown as Record<string, unknown>),
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[GOOGLE_CALENDAR_CONFIG_GET]', error);
     return NextResponse.json(
       { error: 'Failed to fetch Google Calendar config' },
@@ -79,12 +81,8 @@ export async function POST(
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
   try {
-    const session = await getServerSession();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
     const { workspaceId } = await params;
+    await requireWorkspaceAccess(workspaceId);
     const body = await request.json();
     const { clientId, clientSecret, calendarId } = body;
 
@@ -132,7 +130,13 @@ export async function POST(
       { config: maskConfig(config as unknown as Record<string, unknown>) },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[GOOGLE_CALENDAR_CONFIG_POST]', error);
     return NextResponse.json(
       { error: 'Failed to create Google Calendar config' },
@@ -155,12 +159,8 @@ export async function PUT(
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
   try {
-    const session = await getServerSession();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
     const { workspaceId } = await params;
+    await requireWorkspaceAccess(workspaceId);
     const body = await request.json();
     const { isActive, calendarId, clientId, clientSecret } = body;
 
@@ -199,7 +199,13 @@ export async function PUT(
     return NextResponse.json({
       config: maskConfig(updated as unknown as Record<string, unknown>),
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[GOOGLE_CALENDAR_CONFIG_PUT]', error);
     return NextResponse.json(
       { error: 'Failed to update Google Calendar config' },
@@ -217,12 +223,8 @@ export async function DELETE(
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
   try {
-    const session = await getServerSession();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
     const { workspaceId } = await params;
+    await requireWorkspaceAccess(workspaceId);
 
     const existing = await db.googleCalendarConfig.findUnique({
       where: { workspaceId },
@@ -243,7 +245,13 @@ export async function DELETE(
       success: true,
       message: 'Google Calendar config removed successfully',
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[GOOGLE_CALENDAR_CONFIG_DELETE]', error);
     return NextResponse.json(
       { error: 'Failed to delete Google Calendar config' },

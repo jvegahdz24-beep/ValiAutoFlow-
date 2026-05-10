@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getServerSession } from '@/lib/auth'
+import { requireWorkspaceAccess } from '@/lib/auth'
 import { getPhoneNumberDetails, subscribeAppToWaba } from '@/lib/whatsapp/client'
 
 // ============================================================
@@ -29,39 +29,46 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
-  const session = await getServerSession()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  try {
+    const { workspaceId } = await params
+    await requireWorkspaceAccess(workspaceId)
+
+    const config = await db.whatsAppConfig.findUnique({
+      where: { workspaceId },
+    })
+
+    if (!config) {
+      return NextResponse.json({ config: null })
+    }
+
+    // Mask the access token — never expose the full token
+    const maskedAccessToken = maskAccessToken(config.accessToken)
+
+    // Get templates for this workspace
+    const templates = await db.whatsAppTemplate.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    })
+
+    return NextResponse.json({
+      config: {
+        ...config,
+        accessToken: maskedAccessToken,
+      },
+      templates,
+      webhookUrl: config.webhookUrl || null,
+    })
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    console.error('[WhatsApp/GET] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  const { workspaceId } = await params
-
-  const config = await db.whatsAppConfig.findUnique({
-    where: { workspaceId },
-  })
-
-  if (!config) {
-    return NextResponse.json({ config: null })
-  }
-
-  // Mask the access token — never expose the full token
-  const maskedAccessToken = maskAccessToken(config.accessToken)
-
-  // Get templates for this workspace
-  const templates = await db.whatsAppTemplate.findMany({
-    where: { workspaceId },
-    orderBy: { createdAt: 'desc' },
-    take: 20,
-  })
-
-  return NextResponse.json({
-    config: {
-      ...config,
-      accessToken: maskedAccessToken,
-    },
-    templates,
-    webhookUrl: config.webhookUrl || null,
-  })
 }
 
 // ============================================================
@@ -72,100 +79,107 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
-  const session = await getServerSession()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
+  try {
+    const { workspaceId } = await params
+    await requireWorkspaceAccess(workspaceId)
+    const body = await request.json()
 
-  const { workspaceId } = await params
-  const body = await request.json()
+    const { phoneNumberId, accessToken, verifyToken, businessAccountId, wabaId, isActive } = body
 
-  const { phoneNumberId, accessToken, verifyToken, businessAccountId, wabaId, isActive } = body
+    if (!phoneNumberId || !accessToken || !verifyToken) {
+      return NextResponse.json(
+        { error: 'phoneNumberId, accessToken, and verifyToken are required' },
+        { status: 400 }
+      )
+    }
 
-  if (!phoneNumberId || !accessToken || !verifyToken) {
-    return NextResponse.json(
-      { error: 'phoneNumberId, accessToken, and verifyToken are required' },
-      { status: 400 }
-    )
-  }
+    // ──────────────────────────────────────────────────────────
+    // Verify the access token by calling the Meta API
+    // ──────────────────────────────────────────────────────────
+    const phoneDetails = await getPhoneNumberDetails(phoneNumberId, accessToken)
+    if (!phoneDetails.success) {
+      return NextResponse.json(
+        {
+          error: 'Token de acceso inválido o Phone Number ID incorrecto. Verifica tus credenciales.',
+          details: phoneDetails.error,
+        },
+        { status: 400 }
+      )
+    }
 
-  // ──────────────────────────────────────────────────────────
-  // Verify the access token by calling the Meta API
-  // ──────────────────────────────────────────────────────────
-  const phoneDetails = await getPhoneNumberDetails(phoneNumberId, accessToken)
-  if (!phoneDetails.success) {
-    return NextResponse.json(
-      {
-        error: 'Token de acceso inválido o Phone Number ID incorrecto. Verifica tus credenciales.',
-        details: phoneDetails.error,
+    // ──────────────────────────────────────────────────────────
+    // Upsert config
+    // ──────────────────────────────────────────────────────────
+    const config = await db.whatsAppConfig.upsert({
+      where: { workspaceId },
+      create: {
+        workspaceId,
+        phoneNumberId,
+        accessToken,
+        verifyToken,
+        businessAccountId: businessAccountId || null,
+        wabaId: wabaId || null,
+        isActive: isActive ?? true,
       },
-      { status: 400 }
-    )
-  }
+      update: {
+        phoneNumberId,
+        accessToken,
+        verifyToken,
+        businessAccountId: businessAccountId || null,
+        wabaId: wabaId || null,
+        isActive: isActive ?? true,
+      },
+    })
 
-  // ──────────────────────────────────────────────────────────
-  // Upsert config
-  // ──────────────────────────────────────────────────────────
-  const config = await db.whatsAppConfig.upsert({
-    where: { workspaceId },
-    create: {
-      workspaceId,
-      phoneNumberId,
-      accessToken,
-      verifyToken,
-      businessAccountId: businessAccountId || null,
-      wabaId: wabaId || null,
-      isActive: isActive ?? true,
-    },
-    update: {
-      phoneNumberId,
-      accessToken,
-      verifyToken,
-      businessAccountId: businessAccountId || null,
-      wabaId: wabaId || null,
-      isActive: isActive ?? true,
-    },
-  })
+    // ──────────────────────────────────────────────────────────
+    // Set up webhook with Meta if active
+    // ──────────────────────────────────────────────────────────
+    if (config.isActive && config.wabaId) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : ''
 
-  // ──────────────────────────────────────────────────────────
-  // Set up webhook with Meta if active
-  // ──────────────────────────────────────────────────────────
-  if (config.isActive && config.wabaId) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : ''
+      if (appUrl) {
+        const webhookUrl = `${appUrl}/api/whatsapp/webhook`
 
-    if (appUrl) {
-      const webhookUrl = `${appUrl}/api/whatsapp/webhook`
+        // Subscribe the app to the WABA
+        const subResult = await subscribeAppToWaba(config.wabaId, accessToken)
 
-      // Subscribe the app to the WABA
-      const subResult = await subscribeAppToWaba(config.wabaId, accessToken)
-
-      if (subResult.success) {
-        await db.whatsAppConfig.update({
-          where: { id: config.id },
-          data: {
-            webhookUrl,
-            lastSyncAt: new Date(),
-          },
-        })
+        if (subResult.success) {
+          await db.whatsAppConfig.update({
+            where: { id: config.id },
+            data: {
+              webhookUrl,
+              lastSyncAt: new Date(),
+            },
+          })
+        }
       }
     }
+
+    // Mask access token in response
+    const maskedAccessToken = maskAccessToken(accessToken)
+
+    return NextResponse.json({
+      config: {
+        ...config,
+        accessToken: maskedAccessToken,
+      },
+      phoneDetails: phoneDetails.data,
+      message: config.isActive
+        ? 'WhatsApp configurado y activo'
+        : 'WhatsApp configurado pero inactivo',
+    })
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    console.error('[WhatsApp/POST] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  // Mask access token in response
-  const maskedAccessToken = maskAccessToken(accessToken)
-
-  return NextResponse.json({
-    config: {
-      ...config,
-      accessToken: maskedAccessToken,
-    },
-    phoneDetails: phoneDetails.data,
-    message: config.isActive
-      ? 'WhatsApp configurado y activo'
-      : 'WhatsApp configurado pero inactivo',
-  })
 }
 
 // ============================================================
@@ -176,78 +190,85 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
-  const session = await getServerSession()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
+  try {
+    const { workspaceId } = await params
+    await requireWorkspaceAccess(workspaceId)
+    const body = await request.json()
 
-  const { workspaceId } = await params
-  const body = await request.json()
+    const existing = await db.whatsAppConfig.findUnique({
+      where: { workspaceId },
+    })
 
-  const existing = await db.whatsAppConfig.findUnique({
-    where: { workspaceId },
-  })
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'WhatsApp config not found. Use POST to create.' },
+        { status: 404 }
+      )
+    }
 
-  if (!existing) {
-    return NextResponse.json(
-      { error: 'WhatsApp config not found. Use POST to create.' },
-      { status: 404 }
-    )
-  }
+    const updateData: Record<string, unknown> = {}
 
-  const updateData: Record<string, unknown> = {}
+    // Only update provided fields
+    if (body.phoneNumberId !== undefined) {
+      updateData.phoneNumberId = body.phoneNumberId
+    }
+    if (body.accessToken !== undefined) {
+      updateData.accessToken = body.accessToken
+    }
+    if (body.verifyToken !== undefined) {
+      updateData.verifyToken = body.verifyToken
+    }
+    if (body.businessAccountId !== undefined) {
+      updateData.businessAccountId = body.businessAccountId
+    }
+    if (body.wabaId !== undefined) {
+      updateData.wabaId = body.wabaId
+    }
+    if (body.isActive !== undefined) {
+      updateData.isActive = body.isActive
 
-  // Only update provided fields
-  if (body.phoneNumberId !== undefined) {
-    updateData.phoneNumberId = body.phoneNumberId
-  }
-  if (body.accessToken !== undefined) {
-    updateData.accessToken = body.accessToken
-  }
-  if (body.verifyToken !== undefined) {
-    updateData.verifyToken = body.verifyToken
-  }
-  if (body.businessAccountId !== undefined) {
-    updateData.businessAccountId = body.businessAccountId
-  }
-  if (body.wabaId !== undefined) {
-    updateData.wabaId = body.wabaId
-  }
-  if (body.isActive !== undefined) {
-    updateData.isActive = body.isActive
+      // When activating, set up the webhook with Meta
+      if (body.isActive && existing.wabaId) {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : ''
 
-    // When activating, set up the webhook with Meta
-    if (body.isActive && existing.wabaId) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : ''
+        if (appUrl) {
+          const webhookUrl = `${appUrl}/api/whatsapp/webhook`
+          const token = body.accessToken || existing.accessToken
 
-      if (appUrl) {
-        const webhookUrl = `${appUrl}/api/whatsapp/webhook`
-        const token = body.accessToken || existing.accessToken
-
-        const subResult = await subscribeAppToWaba(existing.wabaId, token)
-        if (subResult.success) {
-          updateData.webhookUrl = webhookUrl
-          updateData.lastSyncAt = new Date()
+          const subResult = await subscribeAppToWaba(existing.wabaId, token)
+          if (subResult.success) {
+            updateData.webhookUrl = webhookUrl
+            updateData.lastSyncAt = new Date()
+          }
         }
       }
     }
+
+    const updated = await db.whatsAppConfig.update({
+      where: { workspaceId },
+      data: updateData,
+    })
+
+    const maskedAccessToken = maskAccessToken(updated.accessToken)
+
+    return NextResponse.json({
+      config: {
+        ...updated,
+        accessToken: maskedAccessToken,
+      },
+    })
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    console.error('[WhatsApp/PUT] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  const updated = await db.whatsAppConfig.update({
-    where: { workspaceId },
-    data: updateData,
-  })
-
-  const maskedAccessToken = maskAccessToken(updated.accessToken)
-
-  return NextResponse.json({
-    config: {
-      ...updated,
-      accessToken: maskedAccessToken,
-    },
-  })
 }
 
 // ============================================================
@@ -258,23 +279,30 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ workspaceId: string }> }
 ) {
-  const session = await getServerSession()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
+  try {
+    const { workspaceId } = await params
+    await requireWorkspaceAccess(workspaceId)
 
-  const { workspaceId } = await params
-
-  const existing = await db.whatsAppConfig.findUnique({
-    where: { workspaceId },
-  })
-
-  if (existing) {
-    // Delete the config
-    await db.whatsAppConfig.delete({
+    const existing = await db.whatsAppConfig.findUnique({
       where: { workspaceId },
     })
-  }
 
-  return NextResponse.json({ message: 'WhatsApp config removed' })
+    if (existing) {
+      // Delete the config
+      await db.whatsAppConfig.delete({
+        where: { workspaceId },
+      })
+    }
+
+    return NextResponse.json({ message: 'WhatsApp config removed' })
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    console.error('[WhatsApp/DELETE] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }

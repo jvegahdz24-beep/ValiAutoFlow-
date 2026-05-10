@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   ArrowRight, Zap, Calendar, Users, TrendingUp,
   MessageCircle, CheckCircle2, Star, Shield, Brain, Bot,
-  Clock, Target, RefreshCw, BarChart3, HeadphonesIcon
+
 } from "lucide-react";
 
 // ============================================================

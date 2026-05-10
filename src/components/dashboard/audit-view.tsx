@@ -1,13 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { Activity, Clock, AlertCircle, Info, AlertTriangle, Bug } from 'lucide-react'
+import { Activity, AlertCircle, Info, AlertTriangle, Bug } from 'lucide-react'
 
 const SEVERITY_CONFIG: Record<string, { icon: typeof Info; color: string; badgeClass: string }> = {
   INFO: { icon: Info, color: 'text-sky-400', badgeClass: 'border-sky-500/30 text-sky-400 bg-sky-500/10' },

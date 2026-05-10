@@ -132,7 +132,7 @@ export class JHONAgent {
   private agenteDiagnostico(
     archetype: LeadArchetype,
     temperature: LeadTemperature,
-    memory: MemoryPacket,
+    _memory: MemoryPacket,
     message: string,
     config?: BusinessConfig,
     pendingQuestions?: { id: string; text: string; purpose: string; stage: string }[]
@@ -176,7 +176,7 @@ export class JHONAgent {
     question: { id: string; text: string; purpose: string; stage: string },
     archetype: LeadArchetype,
     _message: string,
-    config?: BusinessConfig
+    _config?: BusinessConfig
   ): string {
     // Always provide a REASON for the question (makes it feel helpful, not invasive)
     const prefixes: Record<LeadArchetype, string> = {
@@ -194,7 +194,7 @@ export class JHONAgent {
   /**
    * DIAGNOSTIC HOOK: Empathy + common problem + validation question
    */
-  private getDiagnosticHook(archetype: LeadArchetype, temperature: LeadTemperature, config?: BusinessConfig): string {
+  private getDiagnosticHook(_archetype: LeadArchetype, temperature: LeadTemperature, config?: BusinessConfig): string {
     const businessType = config?.businessType || 'general';
     const volumeKeyword = config?.leadFormula?.volume_keyword || 'mensajes';
 

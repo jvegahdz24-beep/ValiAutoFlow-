@@ -1,34 +1,32 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from '@/lib/auth'
+import { requireWorkspaceAccess } from '@/lib/auth'
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
   try {
-    const session = await getServerSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
-
     const { workspaceId: id } = await params
+    await requireWorkspaceAccess(id)
     let config = await db.workspaceConfig.findUnique({ where: { workspaceId: id } })
     if (!config) {
       // Create default config if none exists
       config = await db.workspaceConfig.create({ data: { workspaceId: id } })
     }
     return NextResponse.json({ config })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
     return NextResponse.json({ error: 'Failed to fetch config' }, { status: 500 })
   }
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
   try {
-    const session = await getServerSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
-
     const { workspaceId: id } = await params
+    await requireWorkspaceAccess(id)
     const body = await request.json()
 
     // Build update data with proper JSON serialization
@@ -49,7 +47,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     })
 
     return NextResponse.json({ config })
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to update config', details: error instanceof Error ? error.message : String(error) }, { status: 500 })
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    return NextResponse.json({ error: 'Failed to update config' }, { status: 500 })
   }
 }

@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from '@/lib/auth'
+import { requireWorkspaceAccess } from '@/lib/auth'
 import { sendMessage, sendTemplateMessage, normalizePhoneNumber } from '@/lib/whatsapp/client'
 import { isContactOptedOut } from '@/lib/whatsapp/channel-bridge'
 
@@ -17,14 +17,10 @@ const META_RATE_LIMIT_MS = 1500 // 1.5s between messages = ~40/min
 const BATCH_SIZE = 10
 
 // POST - Execute/send campaign
-export async function POST(request: NextRequest, { params }: { params: Promise<{ workspaceId: string; campaignId: string }> }) {
+export async function POST(_request: NextRequest, { params }: { params: Promise<{ workspaceId: string; campaignId: string }> }) {
   try {
-    const session = await getServerSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
-
     const { workspaceId, campaignId } = await params
+    await requireWorkspaceAccess(workspaceId)
     const campaign = await db.campaign.findUnique({
       where: { id: campaignId, workspaceId },
     })
@@ -91,7 +87,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     let sent = 0
     let delivered = 0
     let failed = 0
-    let skipped = 0
 
     // Determine if we should use a template (for contacts outside 24h window)
     // For campaigns, we ALWAYS use templates if available — it's safer
@@ -219,7 +214,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
 
     return NextResponse.json({ success: true, stats })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
     console.error('[Campaign Send] Error:', error)
     return NextResponse.json({ error: 'Failed to send campaign' }, { status: 500 })
   }

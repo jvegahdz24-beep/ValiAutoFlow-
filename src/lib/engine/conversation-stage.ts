@@ -10,7 +10,7 @@ export class ConversationStageDetector {
     messageContent: string,
     currentStage: ConversationStageType,
     temperature: LeadTemperature,
-    archetype: LeadArchetype,
+    _archetype: LeadArchetype,
     messageCount: number
   ): { stage: ConversationStageType; confidence: number; triggerReason: string } {
     const scores: Record<ConversationStageType, number> = {

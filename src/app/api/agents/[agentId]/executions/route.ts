@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, requireWorkspaceAccess } from '@/lib/auth';
 
 // GET /api/agents/[agentId]/executions — List executions for an agent
 export async function GET(
@@ -22,6 +22,9 @@ export async function GET(
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
     }
+
+    // Verify workspace access
+    await requireWorkspaceAccess(agent.workspaceId);
 
     const where: Record<string, unknown> = { agentId };
 
@@ -69,7 +72,13 @@ export async function GET(
         limit,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[AGENT_EXECUTIONS_LIST]', error);
     return NextResponse.json(
       { error: 'Failed to fetch agent executions' },

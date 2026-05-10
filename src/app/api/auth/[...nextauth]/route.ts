@@ -14,16 +14,15 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 /**
- * Compare a plaintext password against a stored hash.
- * Falls back to direct comparison for legacy/demo plaintext passwords.
+ * Compare a plaintext password against a stored bcrypt hash.
+ * Rejects non-bcrypt passwords — all passwords must be properly hashed.
  */
 export async function comparePassword(plaintext: string, stored: string): Promise<boolean> {
-  // If the stored password looks like a bcrypt hash ($2a$, $2b$, $2y$)
-  if (stored.startsWith('$2')) {
-    return bcrypt.compare(plaintext, stored)
+  if (!stored.startsWith('$2')) {
+    // Reject non-bcrypt passwords — all passwords must be properly hashed
+    return false
   }
-  // Legacy/demo plaintext comparison (will be removed after migration)
-  return plaintext === stored
+  return bcrypt.compare(plaintext, stored)
 }
 
 /**
@@ -168,7 +167,6 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Compare password with bcrypt hash
-        // Supports both hashed (new) and plaintext (legacy/demo) passwords
         const isPasswordValid = await comparePassword(credentials.password, user.password)
         if (!isPasswordValid) {
           throw new Error("Invalid password")

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, requireWorkspaceAccess } from '@/lib/auth';
 
 // GET /api/conversations/[conversationId] — Get conversation with messages, stage history, cognitive state
 export async function GET(
@@ -59,8 +59,17 @@ export async function GET(
       );
     }
 
+    // Verify workspace access
+    await requireWorkspaceAccess(conversation.workspaceId);
+
     return NextResponse.json({ conversation });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[CONVERSATION_GET]', error);
     return NextResponse.json(
       { error: 'Failed to fetch conversation' },
@@ -94,6 +103,9 @@ export async function PATCH(
       );
     }
 
+    // Verify workspace access
+    await requireWorkspaceAccess(conversation.workspaceId);
+
     // Track stage change if changed
     if (currentStage && currentStage !== conversation.currentStage) {
       await db.conversationStage.create({
@@ -123,7 +135,13 @@ export async function PATCH(
     });
 
     return NextResponse.json({ conversation: updated });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     console.error('[CONVERSATION_UPDATE]', error);
     return NextResponse.json(
       { error: 'Failed to update conversation' },

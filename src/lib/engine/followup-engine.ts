@@ -5,7 +5,6 @@
 
 import {
   type ConversationStageType,
-  type LeadTemperature,
   type LeadArchetype,
   type MemoryPacket,
 } from './types';
@@ -131,7 +130,7 @@ export class FollowUpEngine {
 
   // ---- ARCHETYPE-SPECIFIC FOLLOW-UPS ----
 
-  private decisiveFollowUp(stage: string, urgency: number, memory: MemoryPacket): string {
+  private decisiveFollowUp(_stage: string, urgency: number, _memory: MemoryPacket): string {
     const messages = [
       'Tengo los números listos para ti. ¿Cuándo quieres revisarlos?',
       'Solo necesito 10 minutos de tu tiempo para mostrarte el resultado. ¿Hoy o mañana?',
@@ -140,7 +139,7 @@ export class FollowUpEngine {
     return messages[Math.min(urgency, messages.length - 1)];
   }
 
-  private analyticalFollowUp(stage: string, urgency: number, memory: MemoryPacket): string {
+  private analyticalFollowUp(_stage: string, urgency: number, _memory: MemoryPacket): string {
     const messages = [
       'Tengo más datos sobre el impacto que te mencioné. ¿Te los comparto?',
       'Preparé un análisis comparativo para tu caso. ¿Cuándo te viene bien revisarlo?',
@@ -149,7 +148,7 @@ export class FollowUpEngine {
     return messages[Math.min(urgency, messages.length - 1)];
   }
 
-  private socialFollowUp(stage: string, urgency: number, memory: MemoryPacket): string {
+  private socialFollowUp(_stage: string, urgency: number, _memory: MemoryPacket): string {
     const messages = [
       'Hola! Espero que todo vaya bien. Quería compartirte algo que creo te va a gustar.',
       'Cómo vas? Me acordé de ti porque tuve un caso muy similar. ¿Te cuento?',
@@ -158,7 +157,7 @@ export class FollowUpEngine {
     return messages[Math.min(urgency, messages.length - 1)];
   }
 
-  private cautiousFollowUp(stage: string, urgency: number, memory: MemoryPacket): string {
+  private cautiousFollowUp(_stage: string, urgency: number, _memory: MemoryPacket): string {
     const messages = [
       'Entiendo que necesitas tiempo. Solo quería recordarte que estamos aquí cuando estés listo.',
       'Si tienes dudas, podemos agendar una llamada sin compromiso. Así ves todo con calma.',
@@ -167,7 +166,7 @@ export class FollowUpEngine {
     return messages[Math.min(urgency, messages.length - 1)];
   }
 
-  private skepticalFollowUp(stage: string, urgency: number, memory: MemoryPacket): string {
+  private skepticalFollowUp(_stage: string, urgency: number, _memory: MemoryPacket): string {
     const messages = [
       'Tengo un caso real de un cliente que tenía las mismas dudas que tú. ¿Te lo comparto?',
       'Los resultados hablan solos. ¿Te interesa ver testimonios de negocios como el tuyo?',
@@ -176,7 +175,7 @@ export class FollowUpEngine {
     return messages[Math.min(urgency, messages.length - 1)];
   }
 
-  private overwhelmedFollowUp(stage: string, urgency: number, memory: MemoryPacket): string {
+  private overwhelmedFollowUp(_stage: string, urgency: number, _memory: MemoryPacket): string {
     const messages = [
       'Sé que estás ocupado. Solo quería recordarte que esto te puede ahorrar tiempo. ¿Cuando puedas?',
       'Hola, solo un mensaje rápido. Esto es muy simple de implementar y te quita trabajo. ¿Te interesa?',

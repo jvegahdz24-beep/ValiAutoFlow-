@@ -1,16 +1,12 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from '@/lib/auth'
+import { requireWorkspaceAccess } from '@/lib/auth'
 
 // GET - Campaign detail with messages
-export async function GET(request: NextRequest, { params }: { params: Promise<{ workspaceId: string; campaignId: string }> }) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ workspaceId: string; campaignId: string }> }) {
   try {
-    const session = await getServerSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
-
     const { workspaceId, campaignId } = await params
+    await requireWorkspaceAccess(workspaceId)
     const campaign = await db.campaign.findUnique({
       where: { id: campaignId, workspaceId },
       include: {
@@ -22,7 +18,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     })
     if (!campaign) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json({ campaign })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
     return NextResponse.json({ error: 'Failed to fetch campaign' }, { status: 500 })
   }
 }
@@ -30,12 +32,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 // PUT - Update campaign (status, name, etc.)
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ workspaceId: string; campaignId: string }> }) {
   try {
-    const session = await getServerSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
-
     const { workspaceId, campaignId } = await params
+    await requireWorkspaceAccess(workspaceId)
     const body = await request.json()
     const update: any = {}
     if (body.status) update.status = body.status
@@ -72,24 +70,32 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     return NextResponse.json({ campaign })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
     return NextResponse.json({ error: 'Failed to update campaign' }, { status: 500 })
   }
 }
 
 // DELETE - Remove campaign
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ workspaceId: string; campaignId: string }> }) {
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ workspaceId: string; campaignId: string }> }) {
   try {
-    const session = await getServerSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
-
     const { workspaceId, campaignId } = await params
+    await requireWorkspaceAccess(workspaceId)
     await db.campaignMessage.deleteMany({ where: { campaignId } })
     await db.campaign.delete({ where: { id: campaignId, workspaceId } })
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    if (error?.message === 'You do not have access to this workspace') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
     return NextResponse.json({ error: 'Failed to delete campaign' }, { status: 500 })
   }
 }

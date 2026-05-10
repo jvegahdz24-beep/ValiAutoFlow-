@@ -1,10 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
 import { CARNALES, type CarnalConfig } from './shared'
@@ -12,7 +11,7 @@ import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Activity, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react'
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 
 export function AgentsView({ workspaceId }: { workspaceId: string }) {

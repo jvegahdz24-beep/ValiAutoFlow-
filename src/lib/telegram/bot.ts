@@ -53,7 +53,6 @@ export async function processTelegramUpdate(
   update: TelegramUpdate,
   workspaceId: string
 ): Promise<{ replyText: string; replyParseMode?: string; replyMarkup?: Record<string, unknown> } | null> {
-  const message = update.message || update.callback_query?.message
   const text = update.message?.text || ''
   const chatId = String(update.message?.chat?.id || update.callback_query?.message?.chat?.id || '')
 
