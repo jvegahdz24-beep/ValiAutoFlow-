@@ -945,8 +945,8 @@ SELECT
   COUNT(DISTINCT l.id) FILTER (WHERE l.temperature = 'HOT') AS hot_leads,
   COUNT(DISTINCT c.id) AS total_conversations,
   COUNT(DISTINCT c.id) FILTER (WHERE c.status = 'ACTIVE') AS active_conversations,
-  COALESCE(SUM(l.dealValue), 0) AS total_pipeline_value,
-  COALESCE(SUM(l.dealValue) FILTER (WHERE l.temperature = 'HOT'), 0) AS hot_pipeline_value,
+  COALESCE(SUM(l."dealValue"), 0) AS total_pipeline_value,
+  COALESCE(SUM(l."dealValue") FILTER (WHERE l.temperature = 'HOT'), 0) AS hot_pipeline_value,
   COUNT(DISTINCT d.id) FILTER (WHERE d."pipelineStageId" IS NOT NULL) AS total_deals,
   COUNT(DISTINCT n.id) FILTER (WHERE n.read = false) AS unread_notifications
 FROM workspaces w
@@ -967,7 +967,7 @@ SELECT
   l.temperature,
   l.archetype,
   l.score,
-  l.lastContactAt,
+  l."lastContactAt",
   st."toStage" AS current_stage,
   st.trigger AS trigger_reason,
   st."createdAt" AS reactivated_at
