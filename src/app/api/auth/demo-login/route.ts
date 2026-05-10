@@ -104,10 +104,16 @@ export async function POST(request: NextRequest) {
       workspaceId: workspace.id,
       isDemo: true,
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Demo login error:", error)
     return NextResponse.json(
-      { error: "Demo login failed" },
+      { 
+        error: "Demo login failed", 
+        details: error.message,
+        code: error.code,
+        clientVersion: error.clientVersion,
+        meta: error.meta ? JSON.stringify(error.meta) : undefined
+      },
       { status: 500 }
     )
   }
