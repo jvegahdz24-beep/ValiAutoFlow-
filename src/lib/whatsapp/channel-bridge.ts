@@ -326,8 +326,8 @@ export async function sendWhatsAppMessage(
         senderId: 'JHON',
         status: 'SENT',
         templateUsed: usedTemplate ? 'followup_fallback' : null,
+        whatsappMessageId: whatsappMessageId || undefined,
         metadata: JSON.stringify({
-          whatsappMessageId: whatsappMessageId || '',
           channel: 'WHATSAPP',
           phoneNumberId: waConfig.phoneNumberId,
           sentVia: 'channel_bridge',
@@ -477,8 +477,8 @@ export async function sendWhatsAppTemplateMessage(
         senderId: 'JHON',
         status: 'SENT',
         templateUsed: templateName,
+        whatsappMessageId: whatsappMessageId || undefined,
         metadata: JSON.stringify({
-          whatsappMessageId: whatsappMessageId || '',
           channel: 'WHATSAPP',
           templateName,
           language,

@@ -131,18 +131,18 @@ export async function POST(request: NextRequest) {
     if (incomingMessage) {
       // ──────────────────────────────────────────────────────────
       // DEDUPLICATION: Check if we already processed this messageId
+      // Uses the indexed whatsappMessageId field for O(1) lookup
       // ──────────────────────────────────────────────────────────
-      const existingMessage = await db.message.findFirst({
-        where: {
-          metadata: { contains: incomingMessage.messageId },
-          direction: 'INBOUND',
-        },
-        select: { id: true },
-      })
+      if (incomingMessage.messageId) {
+        const existingMessage = await db.message.findUnique({
+          where: { whatsappMessageId: incomingMessage.messageId },
+          select: { id: true },
+        })
 
-      if (existingMessage) {
-        console.log(`[WhatsApp Webhook] Duplicate messageId: ${incomingMessage.messageId}. Skipping.`)
-        return NextResponse.json({ status: 'ok' }, { status: 200 })
+        if (existingMessage) {
+          console.log(`[WhatsApp Webhook] Duplicate messageId: ${incomingMessage.messageId}. Skipping.`)
+          return NextResponse.json({ status: 'ok' }, { status: 200 })
+        }
       }
 
       // ──────────────────────────────────────────────────────────
@@ -282,8 +282,8 @@ async function handleIncomingMessage(
             content: parsed.text,
             senderType: 'LEAD',
             status: 'DELIVERED',
+            whatsappMessageId: parsed.messageId,
             metadata: JSON.stringify({
-              whatsappMessageId: parsed.messageId,
               optOut: true,
               optOutKeyword: optOutResult.keyword,
             }),
@@ -320,8 +320,8 @@ async function handleIncomingMessage(
         content: parsed.text,
         senderType: 'LEAD',
         status: 'DELIVERED',
+        whatsappMessageId: parsed.messageId,
         metadata: JSON.stringify({
-          whatsappMessageId: parsed.messageId,
           messageType: parsed.type,
           from: parsed.from,
           timestamp: parsed.timestamp,
@@ -395,11 +395,9 @@ async function handleStatusUpdate(
 
     const internalStatus = statusMap[parsed.status] || parsed.status.toUpperCase()
 
-    // Find the message by WhatsApp message ID stored in metadata
-    const message = await db.message.findFirst({
-      where: {
-        metadata: { contains: parsed.messageId },
-      },
+    // Find the message by WhatsApp message ID
+    const message = await db.message.findUnique({
+      where: { whatsappMessageId: parsed.messageId },
     })
 
     if (message) {

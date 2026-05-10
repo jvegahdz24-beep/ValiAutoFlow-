@@ -202,16 +202,17 @@ model Conversation {
 }
 
 model Message {
-  id              String   @id @default(cuid())
-  conversationId  String
-  direction       String
-  content         String
-  senderType      String
-  senderId        String?
-  metadata        String   @default("{}")
-  status          String   @default("PENDING")
-  templateUsed    String?
-  createdAt       DateTime @default(now())
+  id                String   @id @default(cuid())
+  conversationId    String
+  direction         String
+  content           String
+  senderType        String
+  senderId          String?
+  metadata          String   @default("{}")
+  status            String   @default("PENDING")
+  templateUsed      String?
+  whatsappMessageId String?  // WhatsApp wamid for deduplication (unique per Meta message)
+  createdAt         DateTime @default(now())
 
   conversation        Conversation         @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   messageStatusHistories MessageStatusHistory[]
@@ -221,6 +222,7 @@ model Message {
   @@index([senderType])
   @@index([createdAt])
   @@index([direction, createdAt])
+  @@unique([whatsappMessageId])
   @@map("messages")
 }
 
