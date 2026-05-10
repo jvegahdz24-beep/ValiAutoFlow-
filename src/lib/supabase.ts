@@ -1,26 +1,32 @@
 // ============================================================
-// SUPABASE CLIENT — Browser & Server-side initialization
+// SUPABASE — Central exports for all Supabase client types
 // ============================================================
-// Project 2 (htbejkwhwkvzihaghmhn): Used for Auth, Storage, Realtime
-// Project 1 (ffxppvsdunvsmotxkdiy): Used for PostgreSQL database (Prisma)
+// Project: ffxppvsdunvsmotxkdiy
+// Used for: Auth, Storage, Realtime (client-side features)
+// Database operations should use Prisma via `@/lib/db` instead.
+//
+// Three client types are available:
+// 1. Browser client   → useSupabaseBrowser()  — for Client Components
+// 2. Server client    → createSupabaseServerClient() — for Server Components
+// 3. Middleware client → updateSession() — for middleware session refresh
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js'
+// Re-export the shadcn-generated clients for convenience
+export { createClient as useSupabaseBrowser } from './supabase/client'
+export { createClient as createSupabaseServerClient } from './supabase/server'
+export { updateSession } from './supabase/middleware'
+
+// Legacy browser singleton (for backwards compatibility with existing code)
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || ''
 
-if (!supabaseUrl || !supabaseKey) {
-  console.warn(
-    '[Supabase] NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY not set. Auth/Storage/Realtime features disabled.'
-  )
-}
-
 /**
- * Supabase client for browser-side usage (Auth, Storage, Realtime).
- * Database operations should use Prisma via `@/lib/db` instead.
+ * @deprecated Use `useSupabaseBrowser()` from '@/lib/supabase' instead.
+ * This singleton is kept for backwards compatibility.
  */
-export const supabase = supabaseUrl && supabaseKey
+export const supabase: SupabaseClient | null = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey, {
       auth: {
         persistSession: true,
@@ -36,10 +42,10 @@ export const supabase = supabaseUrl && supabaseKey
   : null
 
 /**
- * Create a Supabase client with service role key for server-side admin operations.
+ * Create a Supabase admin client with service role key.
  * Only use in API routes — never expose to the client.
  */
-export function createServerSupabaseClient(serviceRoleKey: string) {
+export function createSupabaseAdminClient(serviceRoleKey: string) {
   if (!supabaseUrl) {
     throw new Error('NEXT_PUBLIC_SUPABASE_URL is not configured')
   }
@@ -55,5 +61,5 @@ export function createServerSupabaseClient(serviceRoleKey: string) {
  * Check if Supabase client is available and properly configured.
  */
 export function isSupabaseConfigured(): boolean {
-  return supabase !== null
+  return !!(supabaseUrl && supabaseKey)
 }

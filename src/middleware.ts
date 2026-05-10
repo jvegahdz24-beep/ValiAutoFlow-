@@ -1,6 +1,7 @@
 import { withAuth } from "next-auth/middleware"
 import { NextResponse } from "next/server"
 import { validateNextAuthSecret } from "@/lib/security"
+import { updateSession } from "@/lib/supabase/middleware"
 
 // Validate NEXTAUTH_SECRET in production at module load time
 if (process.env.NODE_ENV === 'production') {
@@ -29,28 +30,36 @@ const publicRoutes = [
 const authRoutes = ["/auth/signin", "/auth/register"]
 
 export default withAuth(
-  function middleware(req) {
+  async function middleware(req) {
     const { pathname } = req.nextUrl
     const token = req.nextauth.token
+
+    // ── Refresh Supabase auth session on every request ──
+    // This ensures the Supabase client stays in sync with the server
+    const supabaseResponse = await updateSession(req)
 
     // Allow public routes
     if (publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/') || (route !== '/' && pathname.startsWith(route)))) {
       // If user is already authenticated and visiting auth pages, redirect to dashboard
       if (token && authRoutes.some((route) => pathname.startsWith(route))) {
-        return NextResponse.redirect(new URL("/dashboard", req.url))
+        const url = req.nextUrl.clone()
+        url.pathname = "/dashboard"
+        return NextResponse.redirect(url)
       }
       // If user is authenticated and visiting landing page, redirect to dashboard
       if (token && pathname === '/') {
-        return NextResponse.redirect(new URL("/dashboard", req.url))
+        const url = req.nextUrl.clone()
+        url.pathname = "/dashboard"
+        return NextResponse.redirect(url)
       }
-      return NextResponse.next()
+      return supabaseResponse
     }
 
     // Check if user is authenticated
     if (!token) {
       // In development mode, allow access without auth if no users exist yet
       if (process.env.NODE_ENV === 'development') {
-        return NextResponse.next()
+        return supabaseResponse
       }
       const signInUrl = new URL("/auth/signin", req.url)
       signInUrl.searchParams.set("callbackUrl", pathname)
@@ -67,11 +76,19 @@ export default withAuth(
     }
     requestHeaders.set("x-user-id", token.sub ?? "")
 
-    return NextResponse.next({
+    // Merge Supabase cookies with our custom headers
+    const response = NextResponse.next({
       request: {
         headers: requestHeaders,
       },
     })
+
+    // Carry over Supabase cookies from the session refresh
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      response.cookies.set(cookie.name, cookie.value)
+    })
+
+    return response
   },
   {
     callbacks: {
