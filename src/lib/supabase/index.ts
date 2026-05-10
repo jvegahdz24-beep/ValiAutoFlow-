@@ -1,7 +1,7 @@
 // ============================================================
 // SUPABASE — Central exports for all Supabase client types
 // ============================================================
-// Project: fnqhxtqkjbawajmollfg
+// Project: ffxppvsdunvsmotxkdiy
 // Used for: Auth, Storage, Realtime (client-side features)
 // Database operations should use Prisma via `@/lib/db` instead.
 //
