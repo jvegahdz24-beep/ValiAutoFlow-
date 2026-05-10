@@ -1,53 +1,40 @@
 ---
 Task ID: 1
 Agent: Main Agent
-Task: Pre-launch verification and cleanup for ValiAutoFlow production deploy
+Task: Configure Supabase DB connection with new credentials
 
 Work Log:
-- Verified all security features are implemented (HMAC, rate limiting, prompt sanitization, auth middleware, tool allowlist, circuit breaker)
-- Ran production build: ✅ Compiled successfully in 9.4s
-- Ran TypeScript check: 0 errors
-- Removed obsolete scripts/seed.ts (replaced by src/lib/demo/seed-standalone.ts)
-- Excluded scripts/, examples/, skills/ from tsconfig to eliminate non-project TS errors
-- Removed .env from git tracking (was accidentally committed)
-- Created Prisma migration placeholder (migration_lock.toml + init migration.sql)
-- Committed cleanup: "chore: cleanup for production deploy"
-- Committed security fix: "security: remove .env from git tracking"
-- Verified no sensitive files in git tracking
-- Final count: 49 API routes, 49 Prisma models, 0 build errors
+- Updated .env with Supabase pooler connection strings (DATABASE_URL + DIRECT_URL)
+- Added NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY for client SDK
+- Tested multiple connection formats: pooler (6543), session mode (5432), direct, both project refs
+- All attempts failed with "FATAL: Tenant or user not found" for both ffxppvsdunvsmotxkdiy and htbejkwhwkvzihaghmhn
+- Confirmed both projects are alive (REST API returns 401 = needs API key)
+- Root cause: likely incorrect database password or need exact connection strings from Dashboard
 
 Stage Summary:
-- Project is production-ready for Supabase + Vercel + Upstash deployment
-- All 12 security audit items addressed
-- Git repo clean, no sensitive files tracked
-- Need to: add GitHub remote → push → configure Supabase → configure Vercel → configure Upstash
+- .env configured with Supabase credentials, ready for when exact connection strings are provided
+- DB connection BLOCKED until user copies exact connection strings from Supabase Dashboard → Settings → Database
 
 ---
 Task ID: 2
 Agent: Main Agent
-Task: WhatsApp Phase 1 production fixes + brand identity update
+Task: Apply ValiAutoFlow Brand Definition to project
 
 Work Log:
-- Implemented 24-hour conversation window check in channel-bridge.ts
-- Added template fallback when outside 24h window (finds approved template in DB)
-- Added message deduplication by whatsappMessageId in webhook handler
-- Implemented opt-out detection with 16 keywords (STOP, CANCELAR, BASTA, etc.)
-- Added automatic opt-out confirmation message
-- Added isContactOptedOut() check before every send
-- Fixed campaign send route to actually call WhatsApp Cloud API
-- Added rate limiting in campaign send (1.5s/msg = ~40/min, Meta free tier)
-- Added E.164 phone number validation + normalizePhoneNumber()
-- Added Meta error code mapping (15+ codes including 131047 out-of-window)
-- Added sendMediaMessage() for image/document/audio/video/sticker
-- Added sendInteractiveMessage() for button-type messages
-- Added downloadMedia() for inbound media retrieval
-- Updated landing page with brand identity (blue-700 + emerald colors)
-- Changed hero to "Deja de perder leads. Empieza a vender 24/7."
-- Added Brain icon as logo, "Por qué ValiAutoFlow" section
-- Aligned pricing with brand definition
+- Updated globals.css with brand color tokens (brand-blue-deep, brand-blue, brand-mint, brand-gray-dark, etc.)
+- Replaced generic oklch values with brand-informed palette for both light and dark themes
+- Added brand utility classes: gradient-brand, gradient-brand-text, bg-brand-hero, brand-glow, brand-card-hover, brand-pulse
+- Rebuilt landing page with full brand storytelling: 7 Carnales section, testimonials, brand gradient CTA
+- Updated all color references from generic blue-700/emerald-500 to brand-blue/brand-mint
+- Updated layout.tsx: lang="es", brand-consistent metadata, OpenGraph, Twitter cards
+- Updated signin page: brand colors, Spanish UI, brand gradient demo button
+- Updated register page: brand colors, Spanish UI, brand-mint focus rings
+- Updated dashboard-shell: brand-mint active states, brand-mint badges, brand-mint system status
+- Updated dashboard loading: brand-mint spinner and pulse dots
+- Build ✅ | TypeScript ✅ | Lint ✅ | 0 errors
 
 Stage Summary:
-- WhatsApp Phase 1: ALL 4 critical fixes implemented
-- Brand identity: Landing page updated with new colors, taglines, pricing
-- Build: ✅ | TypeScript: ✅
-- 13 files changed, 849 insertions, 172 deletions
+- Brand Definition fully integrated across: landing page, auth pages, dashboard, CSS tokens
+- Color palette: Blue Deep (#1e3a5f) + Mint Green (#34d399) + Dark Gray (#111827)
+- All UI now uses brand-* CSS custom properties for consistency
+- Spanish language applied throughout user-facing content

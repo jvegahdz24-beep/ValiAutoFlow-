@@ -25,9 +25,9 @@ function SignInForm() {
   const [isDemoLoading, setIsDemoLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(
     error === 'CredentialsSignin'
-      ? 'Email o contraseña incorrectos'
+      ? 'Email o contrase\u00f1a incorrectos'
       : error
-        ? 'Ocurrió un error al iniciar sesión'
+        ? 'Ocurri\u00f3 un error al iniciar sesi\u00f3n'
         : null
   )
 
@@ -47,7 +47,7 @@ function SignInForm() {
       if (result?.error) {
         setErrorMessage(
           result.error === 'CredentialsSignin'
-            ? 'Email o contraseña incorrectos'
+            ? 'Email o contrase\u00f1a incorrectos'
             : result.error
         )
       } else if (result?.ok) {
@@ -55,7 +55,7 @@ function SignInForm() {
         router.refresh()
       }
     } catch {
-      setErrorMessage('Ocurrió un error inesperado')
+      setErrorMessage('Ocurri\u00f3 un error inesperado')
     } finally {
       setIsLoading(false)
     }
@@ -66,7 +66,6 @@ function SignInForm() {
     setErrorMessage(null)
 
     try {
-      // Step 1: Provision the demo account and workspace
       const demoRes = await fetch('/api/auth/demo-login', { method: 'POST' })
 
       if (!demoRes.ok) {
@@ -81,7 +80,6 @@ function SignInForm() {
         return
       }
 
-      // Step 2: Sign in via NextAuth with the demo credentials
       const result = await signIn('credentials', {
         email: demoData.credentials.email,
         password: demoData.credentials.password,
@@ -90,19 +88,17 @@ function SignInForm() {
       })
 
       if (result?.ok) {
-        // Store demo workspace ID for the workspace hook
         if (demoData.workspaceId) {
           localStorage.setItem('valiautoflow_workspace_id', demoData.workspaceId)
         }
-        // Mark as demo user for tour auto-start
         localStorage.setItem('valiautoflow_demo_user', 'true')
         router.push('/')
         router.refresh()
       } else {
-        setErrorMessage('Error al iniciar sesión demo')
+        setErrorMessage('Error al iniciar sesi\u00f3n demo')
       }
     } catch {
-      setErrorMessage('Error de conexión')
+      setErrorMessage('Error de conexi\u00f3n')
     } finally {
       setIsDemoLoading(false)
     }
@@ -113,11 +109,11 @@ function SignInForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-brand-gray-dark px-4">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-1/2 -left-1/2 h-full w-full rounded-full bg-emerald-500/5 blur-3xl" />
-        <div className="absolute -bottom-1/2 -right-1/2 h-full w-full rounded-full bg-emerald-500/5 blur-3xl" />
-        <div className="absolute top-1/4 right-1/4 h-64 w-64 rounded-full bg-purple-500/5 blur-3xl" />
+        <div className="absolute -top-1/2 -left-1/2 h-full w-full rounded-full bg-brand-mint/5 blur-3xl" />
+        <div className="absolute -bottom-1/2 -right-1/2 h-full w-full rounded-full bg-brand-blue/5 blur-3xl" />
+        <div className="absolute top-1/4 right-1/4 h-64 w-64 rounded-full bg-brand-blue/3 blur-3xl" />
       </div>
 
       <motion.div
@@ -127,16 +123,16 @@ function SignInForm() {
         className="relative z-10 w-full max-w-md"
       >
         <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="rounded-2xl bg-emerald-500/20 p-3">
-            <Sparkles className="h-8 w-8 text-emerald-400" />
+          <div className="rounded-2xl bg-brand-mint/20 p-3">
+            <Sparkles className="h-8 w-8 text-brand-mint" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">ValiAutoFlow</h1>
-          <p className="text-sm text-zinc-400">Cognitive Commercial Operating System</p>
+          <p className="text-sm text-zinc-400">Sistema Operativo Comercial Cognitivo</p>
         </div>
 
         <Card className="border-zinc-800 bg-zinc-900/80 shadow-2xl backdrop-blur-sm">
           <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-xl text-white">Iniciar Sesión</CardTitle>
+            <CardTitle className="text-xl text-white">Iniciar Sesi&oacute;n</CardTitle>
             <CardDescription className="text-zinc-400">
               Ingresa tus credenciales o prueba la demo en un clic
             </CardDescription>
@@ -157,7 +153,7 @@ function SignInForm() {
             <Button
               variant="default"
               size="lg"
-              className="w-full mb-6 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold shadow-lg shadow-purple-500/20 transition-all duration-200 hover:shadow-purple-500/30 hover:scale-[1.02]"
+              className="w-full mb-6 bg-gradient-to-r from-brand-blue to-brand-mint-dark hover:from-brand-blue-deep hover:to-brand-mint-dark text-white font-semibold shadow-lg shadow-brand-blue/20 transition-all duration-200 hover:shadow-brand-blue/30 hover:scale-[1.02]"
               onClick={handleDemoLogin}
               disabled={isDemoLoading || isLoading}
             >
@@ -177,7 +173,7 @@ function SignInForm() {
             <div className="relative my-4">
               <Separator className="bg-zinc-700" />
               <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-zinc-900 px-3 text-xs text-zinc-500">
-                o inicia sesión
+                o inicia sesi&oacute;n
               </span>
             </div>
 
@@ -193,7 +189,7 @@ function SignInForm() {
                     placeholder="tu@empresa.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="border-zinc-700 bg-zinc-800/50 pl-10 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20"
+                    className="border-zinc-700 bg-zinc-800/50 pl-10 text-white placeholder:text-zinc-500 focus:border-brand-mint focus:ring-brand-mint/20"
                     required
                     disabled={isLoading || isDemoLoading}
                   />
@@ -201,16 +197,16 @@ function SignInForm() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-zinc-300">Contraseña</Label>
+                <Label htmlFor="password" className="text-zinc-300">Contrase&ntilde;a</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Tu contraseña"
+                    placeholder="Tu contrase\u00f1a"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="border-zinc-700 bg-zinc-800/50 pl-10 pr-10 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20"
+                    className="border-zinc-700 bg-zinc-800/50 pl-10 pr-10 text-white placeholder:text-zinc-500 focus:border-brand-mint focus:ring-brand-mint/20"
                     required
                     disabled={isLoading || isDemoLoading}
                   />
@@ -226,7 +222,7 @@ function SignInForm() {
 
               <Button
                 type="submit"
-                className="w-full bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
+                className="w-full bg-brand-blue text-white hover:bg-brand-blue-deep transition-colors"
                 disabled={isLoading || isDemoLoading}
               >
                 {isLoading ? (
@@ -265,8 +261,8 @@ function SignInForm() {
 
           <CardFooter className="flex justify-center border-t border-zinc-800 pt-4">
             <p className="text-sm text-zinc-400">
-              ¿No tienes cuenta?{' '}
-              <Link href="/auth/register" className="font-medium text-emerald-400 hover:text-emerald-300 transition-colors">
+              &iquest;No tienes cuenta?{' '}
+              <Link href="/auth/register" className="font-medium text-brand-mint hover:text-brand-mint-light transition-colors">
                 Crear una
               </Link>
             </p>
@@ -274,7 +270,7 @@ function SignInForm() {
         </Card>
 
         <p className="mt-6 text-center text-xs text-zinc-600">
-          Al iniciar sesión, aceptas nuestros Términos de Servicio y Política de Privacidad
+          Al iniciar sesi&oacute;n, aceptas nuestros T&eacute;rminos de Servicio y Pol&iacute;tica de Privacidad
         </p>
       </motion.div>
     </div>
@@ -284,8 +280,8 @@ function SignInForm() {
 export default function SignInPage() {
   return (
     <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500/30 border-t-emerald-400" />
+      <div className="flex min-h-screen items-center justify-center bg-brand-gray-dark">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-mint/30 border-t-brand-mint" />
       </div>
     }>
       <SignInForm />

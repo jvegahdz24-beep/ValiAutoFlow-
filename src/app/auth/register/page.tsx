@@ -28,13 +28,12 @@ export default function RegisterPage() {
     setErrorMessage(null)
 
     if (password.length < 6) {
-      setErrorMessage('Password must be at least 6 characters')
+      setErrorMessage('La contrase\u00f1a debe tener al menos 6 caracteres')
       setIsLoading(false)
       return
     }
 
     try {
-      // Create the user account
       const registerRes = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -49,12 +48,11 @@ export default function RegisterPage() {
       const data = await registerRes.json()
 
       if (!registerRes.ok) {
-        setErrorMessage(data.error || 'Registration failed')
+        setErrorMessage(data.error || 'Error al crear la cuenta')
         setIsLoading(false)
         return
       }
 
-      // Sign in with the new credentials
       const result = await signIn('credentials', {
         email,
         password,
@@ -65,22 +63,21 @@ export default function RegisterPage() {
         router.push('/')
         router.refresh()
       } else {
-        // Registration succeeded but auto-login failed
-        router.push('/auth/signin?message=Registration+successful,+please+sign+in')
+        router.push('/auth/signin?message=Registro+exitoso,+inicia+sesi%C3%B3n')
       }
     } catch {
-      setErrorMessage('An unexpected error occurred')
+      setErrorMessage('Ocurri\u00f3 un error inesperado')
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-brand-gray-dark px-4">
       {/* Background pattern */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-1/2 -left-1/2 h-full w-full rounded-full bg-emerald-500/5 blur-3xl" />
-        <div className="absolute -bottom-1/2 -right-1/2 h-full w-full rounded-full bg-emerald-500/5 blur-3xl" />
+        <div className="absolute -top-1/2 -left-1/2 h-full w-full rounded-full bg-brand-mint/5 blur-3xl" />
+        <div className="absolute -bottom-1/2 -right-1/2 h-full w-full rounded-full bg-brand-blue/5 blur-3xl" />
       </div>
 
       <motion.div
@@ -91,22 +88,22 @@ export default function RegisterPage() {
       >
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="rounded-2xl bg-emerald-500/20 p-3">
-            <Sparkles className="h-8 w-8 text-emerald-400" />
+          <div className="rounded-2xl bg-brand-mint/20 p-3">
+            <Sparkles className="h-8 w-8 text-brand-mint" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">
             ValiAutoFlow
           </h1>
           <p className="text-sm text-zinc-400">
-            Create your account
+            Crea tu cuenta y empieza a vender 24/7
           </p>
         </div>
 
         <Card className="border-zinc-800 bg-zinc-900/80 shadow-2xl backdrop-blur-sm">
           <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-xl text-white">Get started</CardTitle>
+            <CardTitle className="text-xl text-white">Crear cuenta</CardTitle>
             <CardDescription className="text-zinc-400">
-              Create your account and set up your first workspace
+              Configura tu primer workspace en minutos
             </CardDescription>
           </CardHeader>
 
@@ -124,17 +121,17 @@ export default function RegisterPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name" className="text-zinc-300">
-                  Full name
+                  Nombre completo
                 </Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                   <Input
                     id="name"
                     type="text"
-                    placeholder="John Doe"
+                    placeholder="Juan P&eacute;rez"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="border-zinc-700 bg-zinc-800/50 pl-10 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20"
+                    className="border-zinc-700 bg-zinc-800/50 pl-10 text-white placeholder:text-zinc-500 focus:border-brand-mint focus:ring-brand-mint/20"
                     required
                     disabled={isLoading}
                   />
@@ -150,10 +147,10 @@ export default function RegisterPage() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="you@company.com"
+                    placeholder="tu@empresa.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="border-zinc-700 bg-zinc-800/50 pl-10 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20"
+                    className="border-zinc-700 bg-zinc-800/50 pl-10 text-white placeholder:text-zinc-500 focus:border-brand-mint focus:ring-brand-mint/20"
                     required
                     disabled={isLoading}
                   />
@@ -162,17 +159,17 @@ export default function RegisterPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="password" className="text-zinc-300">
-                  Password
+                  Contrase&ntilde;a
                 </Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Min. 6 characters"
+                    placeholder="M&iacute;nimo 6 caracteres"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="border-zinc-700 bg-zinc-800/50 pl-10 pr-10 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20"
+                    className="border-zinc-700 bg-zinc-800/50 pl-10 pr-10 text-white placeholder:text-zinc-500 focus:border-brand-mint focus:ring-brand-mint/20"
                     required
                     disabled={isLoading}
                     minLength={6}
@@ -193,17 +190,17 @@ export default function RegisterPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="businessName" className="text-zinc-300">
-                  Business name
+                  Nombre del negocio
                 </Label>
                 <div className="relative">
                   <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                   <Input
                     id="businessName"
                     type="text"
-                    placeholder="My Business"
+                    placeholder="Mi Negocio"
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
-                    className="border-zinc-700 bg-zinc-800/50 pl-10 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20"
+                    className="border-zinc-700 bg-zinc-800/50 pl-10 text-white placeholder:text-zinc-500 focus:border-brand-mint focus:ring-brand-mint/20"
                     required
                     disabled={isLoading}
                   />
@@ -212,16 +209,16 @@ export default function RegisterPage() {
 
               <Button
                 type="submit"
-                className="w-full bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
+                className="w-full bg-brand-blue text-white hover:bg-brand-blue-deep transition-colors"
                 disabled={isLoading}
               >
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                    Creating account...
+                    Creando cuenta...
                   </div>
                 ) : (
-                  'Create account'
+                  'Crear cuenta'
                 )}
               </Button>
             </form>
@@ -229,19 +226,19 @@ export default function RegisterPage() {
 
           <CardFooter className="flex justify-center border-t border-zinc-800 pt-4">
             <p className="text-sm text-zinc-400">
-              Already have an account?{' '}
+              &iquest;Ya tienes cuenta?{' '}
               <Link
                 href="/auth/signin"
-                className="font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+                className="font-medium text-brand-mint hover:text-brand-mint-light transition-colors"
               >
-                Sign in
+                Inicia sesi&oacute;n
               </Link>
             </p>
           </CardFooter>
         </Card>
 
         <p className="mt-6 text-center text-xs text-zinc-600">
-          By creating an account, you agree to our Terms of Service and Privacy Policy
+          Al crear una cuenta, aceptas nuestros T&eacute;rminos de Servicio y Pol&iacute;tica de Privacidad
         </p>
       </motion.div>
     </div>

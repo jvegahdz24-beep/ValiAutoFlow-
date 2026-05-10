@@ -43,24 +43,24 @@ function DashboardInner() {
           className="flex flex-col items-center gap-4"
         >
           <div className="relative">
-            <div className="rounded-2xl bg-emerald-500/20 p-4">
-              <Sparkles className="h-10 w-10 text-emerald-400" />
+            <div className="rounded-2xl bg-brand-mint/20 p-4">
+              <Sparkles className="h-10 w-10 text-brand-mint" />
             </div>
             <motion.div
-              className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-400"
+              className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-brand-mint"
               animate={{ scale: [1, 1.5, 1] }}
               transition={{ duration: 1.5, repeat: Infinity }}
             />
           </div>
           <div className="text-center">
             <h1 className="text-xl font-bold tracking-tight">ValiAutoFlow</h1>
-            <p className="text-sm text-muted-foreground">Cognitive Commercial Operating System</p>
+            <p className="text-sm text-muted-foreground">Sistema Operativo Comercial Cognitivo</p>
           </div>
           <div className="flex gap-1.5">
             {[0, 1, 2].map(i => (
               <motion.div
                 key={i}
-                className="h-2 w-2 rounded-full bg-emerald-400"
+                className="h-2 w-2 rounded-full bg-brand-mint"
                 animate={{ opacity: [0.3, 1, 0.3] }}
                 transition={{ duration: 1, delay: i * 0.2, repeat: Infinity }}
               />

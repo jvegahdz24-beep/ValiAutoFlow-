@@ -78,13 +78,13 @@ function SidebarContent({
     <div className="flex h-full flex-col">
       {/* Logo */}
       <div data-tour="sidebar-logo" className={cn('flex items-center gap-3 border-b border-border/50 px-4 py-4', collapsed && 'justify-center px-2')}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20">
-          <Sparkles className="h-5 w-5 text-emerald-400" />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-mint/20">
+          <Sparkles className="h-5 w-5 text-brand-mint" />
         </div>
         {!collapsed && (
           <div className="flex flex-col">
             <span className="text-sm font-bold tracking-tight">ValiAutoFlow</span>
-            <span className="text-[10px] text-muted-foreground">Cognitive Commercial OS</span>
+            <span className="text-[10px] text-muted-foreground">Sistema Operativo Comercial Cognitivo</span>
           </div>
         )}
       </div>
@@ -102,7 +102,7 @@ function SidebarContent({
                 size={collapsed ? 'icon' : 'default'}
                 className={cn(
                   'h-10 w-full justify-start gap-3 font-normal',
-                  isActive && 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15 hover:text-emerald-400',
+                  isActive && 'bg-brand-mint/10 text-brand-mint hover:bg-brand-mint/15 hover:text-brand-mint',
                   collapsed && 'justify-center px-0'
                 )}
                 onClick={() => onViewChange(item.id)}
@@ -112,7 +112,7 @@ function SidebarContent({
                   <>
                     <span className="flex-1 text-left text-sm">{item.label}</span>
                     {item.badge && (
-                      <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                      <span className="rounded-full bg-brand-mint/20 px-2 py-0.5 text-[10px] font-medium text-brand-mint">
                         {item.badge}
                       </span>
                     )}
@@ -208,7 +208,7 @@ export function DashboardShell({ activeView, onViewChange, children, workspaceNa
             <div data-tour="notification-center">
               {workspaceId && <NotificationCenter workspaceId={workspaceId} />}
             </div>
-            <div data-tour="system-status" className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <div data-tour="system-status" className="h-2 w-2 rounded-full bg-brand-mint animate-pulse" />
             <span className="text-xs text-muted-foreground hidden sm:inline">System Active</span>
           </div>
         </header>
