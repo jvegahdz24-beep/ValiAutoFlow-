@@ -106,15 +106,15 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: any) {
     console.error("Demo login error:", error)
-    return NextResponse.json(
-      { 
-        error: "Demo login failed", 
-        details: error.message,
-        code: error.code,
-        clientVersion: error.clientVersion,
-        meta: error.meta ? JSON.stringify(error.meta) : undefined
-      },
-      { status: 500 }
-    )
+    const errorInfo: Record<string, unknown> = {
+      error: "Demo login failed",
+      details: typeof error === 'string' ? error : error?.message || 'Unknown error',
+      errorType: error?.constructor?.name || typeof error,
+      code: error?.code,
+      clientVersion: error?.clientVersion,
+    }
+    if (error?.meta) errorInfo.meta = JSON.stringify(error.meta)
+    if (error?.stack) errorInfo.stack = String(error.stack).split('\n').slice(0, 5).join('\n')
+    return NextResponse.json(errorInfo, { status: 500 })
   }
 }
