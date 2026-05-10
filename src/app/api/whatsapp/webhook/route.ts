@@ -12,6 +12,7 @@ import { db } from '@/lib/db'
 import { verifyWebhook, parseIncomingMessage, parseStatusUpdate } from '@/lib/whatsapp/webhook'
 import { markMessageRead } from '@/lib/whatsapp/client'
 import { verifyMetaSignature, checkRateLimit, getClientIdentifier } from '@/lib/security'
+import { detectOptOut, markContactOptedOut } from '@/lib/whatsapp/channel-bridge'
 
 // ============================================================
 // GET — Webhook Verification
@@ -128,6 +129,22 @@ export async function POST(request: NextRequest) {
     }
 
     if (incomingMessage) {
+      // ──────────────────────────────────────────────────────────
+      // DEDUPLICATION: Check if we already processed this messageId
+      // ──────────────────────────────────────────────────────────
+      const existingMessage = await db.message.findFirst({
+        where: {
+          metadata: { contains: incomingMessage.messageId },
+          direction: 'INBOUND',
+        },
+        select: { id: true },
+      })
+
+      if (existingMessage) {
+        console.log(`[WhatsApp Webhook] Duplicate messageId: ${incomingMessage.messageId}. Skipping.`)
+        return NextResponse.json({ status: 'ok' }, { status: 200 })
+      }
+
       // ──────────────────────────────────────────────────────────
       // HANDLE INCOMING MESSAGE
       // ──────────────────────────────────────────────────────────
@@ -247,6 +264,50 @@ async function handleIncomingMessage(
           currentStage: 'EXPLORATION',
         },
       })
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // STEP 5b: CHECK FOR OPT-OUT KEYWORDS
+    // ──────────────────────────────────────────────────────────
+    if (parsed.text) {
+      const optOutResult = detectOptOut(parsed.text)
+      if (optOutResult.optedOut) {
+        await markContactOptedOut(contact.id, optOutResult.keyword || 'unknown')
+
+        // Create inbound message record but do NOT route to engine
+        await db.message.create({
+          data: {
+            conversationId: conversation.id,
+            direction: 'INBOUND',
+            content: parsed.text,
+            senderType: 'LEAD',
+            status: 'DELIVERED',
+            metadata: JSON.stringify({
+              whatsappMessageId: parsed.messageId,
+              optOut: true,
+              optOutKeyword: optOutResult.keyword,
+            }),
+          },
+        })
+
+        // Send confirmation
+        await db.message.create({
+          data: {
+            conversationId: conversation.id,
+            direction: 'OUTBOUND',
+            content: 'Recibimos tu solicitud. No te enviaremos más mensajes por WhatsApp. Si cambias de opinión, envíanos un mensaje.',
+            senderType: 'AI',
+            senderId: 'SYSTEM',
+            status: 'SENT',
+            metadata: JSON.stringify({
+              type: 'opt_out_confirmation',
+            }),
+          },
+        })
+
+        console.log(`[WhatsApp Webhook] Contact ${contact.id} opted out via "${optOutResult.keyword}"`)
+        return
+      }
     }
 
     // ──────────────────────────────────────────────────────────
