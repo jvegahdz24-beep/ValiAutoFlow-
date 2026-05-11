@@ -1,6 +1,6 @@
-import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
+import { isPrismaReachable, findCampaigns, createCampaign, count, createNotification } from '@/lib/db-supabase'
 
 // GET - List campaigns for workspace
 export async function GET(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
@@ -8,19 +8,28 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { workspaceId } = await params
     await requireWorkspaceAccess(workspaceId)
     const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status')
-    
-    const where: any = { workspaceId }
-    if (status) where.status = status
+    const status = searchParams.get('status') || undefined
 
-    const [campaigns, total] = await Promise.all([
-      db.campaign.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        include: { _count: { select: { campaignMessages: true } } },
-      }),
-      db.campaign.count({ where }),
-    ])
+    if (await isPrismaReachable()) {
+      const { db } = await import('@/lib/db')
+      const where: any = { workspaceId }
+      if (status) where.status = status
+
+      const [campaigns, total] = await Promise.all([
+        db.campaign.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          include: { _count: { select: { campaignMessages: true } } },
+        }),
+        db.campaign.count({ where }),
+      ])
+      return NextResponse.json({ campaigns, total })
+    }
+
+    // Supabase REST API fallback
+    console.log('[Campaigns/GET] Prisma unreachable, using Supabase REST API fallback')
+    const campaigns = await findCampaigns(workspaceId, status)
+    const total = campaigns.length
     return NextResponse.json({ campaigns, total })
   } catch (error: any) {
     if (error?.message === 'Authentication required') {
@@ -45,30 +54,60 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'Name and channel are required' }, { status: 400 })
     }
 
-    // Count matching leads for the segment
-    const leadsCount = await db.lead.count({ where: { workspaceId } })
+    if (await isPrismaReachable()) {
+      const { db } = await import('@/lib/db')
+      // Count matching leads for the segment
+      const leadsCount = await db.lead.count({ where: { workspaceId } })
 
-    const campaign = await db.campaign.create({
-      data: {
-        workspaceId,
-        name,
-        description: description || '',
-        channel,
-        templateBody: templateBody || '',
-        segmentQuery: JSON.stringify(segmentQuery || {}),
-        status: 'draft',
-        stats: JSON.stringify({ totalLeads: leadsCount, sent: 0, delivered: 0, opened: 0, clicked: 0, converted: 0 }),
-      },
+      const campaign = await db.campaign.create({
+        data: {
+          workspaceId,
+          name,
+          description: description || '',
+          channel,
+          templateBody: templateBody || '',
+          segmentQuery: JSON.stringify(segmentQuery || {}),
+          status: 'draft',
+          stats: JSON.stringify({ totalLeads: leadsCount, sent: 0, delivered: 0, opened: 0, clicked: 0, converted: 0 }),
+        },
+      })
+
+      // Create notification
+      await db.notification.create({
+        data: {
+          workspaceId,
+          type: 'campaign',
+          title: 'Nueva campaña creada',
+          description: `Campaña "${name}" creada en modo borrador`,
+        },
+      })
+
+      return NextResponse.json({ campaign }, { status: 201 })
+    }
+
+    // Supabase REST API fallback
+    console.log('[Campaigns/POST] Prisma unreachable, using Supabase REST API fallback')
+    const leadsCount = await count('leads', { workspaceId })
+
+    const campaign = await createCampaign(workspaceId, {
+      name,
+      description: description || '',
+      channel,
+      templateBody: templateBody || '',
+      segmentQuery: JSON.stringify(segmentQuery || {}),
+      status: 'draft',
+      stats: JSON.stringify({ totalLeads: leadsCount, sent: 0, delivered: 0, opened: 0, clicked: 0, converted: 0 }),
     })
 
-    // Create notification
-    await db.notification.create({
-      data: {
-        workspaceId,
-        type: 'campaign',
-        title: 'Nueva campaña creada',
-        description: `Campaña "${name}" creada en modo borrador`,
-      },
+    if (!campaign) {
+      return NextResponse.json({ error: 'Failed to create campaign' }, { status: 500 })
+    }
+
+    // Create notification (non-blocking)
+    await createNotification(workspaceId, {
+      type: 'campaign',
+      title: 'Nueva campaña creada',
+      description: `Campaña "${name}" creada en modo borrador`,
     })
 
     return NextResponse.json({ campaign }, { status: 201 })

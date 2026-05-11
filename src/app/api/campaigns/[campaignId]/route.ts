@@ -1,6 +1,6 @@
-import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, requireWorkspaceAccess } from '@/lib/auth'
+import { isPrismaReachable, findCampaignById, updateCampaign } from '@/lib/db-supabase'
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ campaignId: string }> }) {
   try {
@@ -10,13 +10,26 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     }
 
     const { campaignId } = await params
-    const campaign = await db.campaign.findUnique({
-      where: { id: campaignId },
-      include: { campaignMessages: { take: 50, orderBy: { createdAt: 'desc' } } },
-    })
+
+    if (await isPrismaReachable()) {
+      const { db } = await import('@/lib/db')
+      const campaign = await db.campaign.findUnique({
+        where: { id: campaignId },
+        include: { campaignMessages: { take: 50, orderBy: { createdAt: 'desc' } } },
+      })
+      if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+
+      // Verify workspace access
+      await requireWorkspaceAccess(campaign.workspaceId)
+
+      return NextResponse.json({ campaign })
+    }
+
+    // Supabase REST API fallback
+    console.log('[CampaignDetail/GET] Prisma unreachable, using Supabase REST API fallback')
+    const campaign = await findCampaignById(campaignId)
     if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
 
-    // Verify workspace access
     await requireWorkspaceAccess(campaign.workspaceId)
 
     return NextResponse.json({ campaign })
@@ -41,8 +54,34 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { campaignId } = await params
     const body = await request.json()
 
-    // Verify the campaign belongs to user's workspace
-    const existing = await db.campaign.findUnique({ where: { id: campaignId } })
+    if (await isPrismaReachable()) {
+      const { db } = await import('@/lib/db')
+
+      // Verify the campaign belongs to user's workspace
+      const existing = await db.campaign.findUnique({ where: { id: campaignId } })
+      if (!existing) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+      await requireWorkspaceAccess(existing.workspaceId)
+
+      const updateData: Record<string, unknown> = {}
+      if (body.name !== undefined) updateData.name = body.name
+      if (body.description !== undefined) updateData.description = body.description
+      if (body.segmentQuery !== undefined) updateData.segmentQuery = JSON.stringify(body.segmentQuery)
+      if (body.channel !== undefined) updateData.channel = body.channel
+      if (body.templateBody !== undefined) updateData.templateBody = body.templateBody
+      if (body.status !== undefined) {
+        updateData.status = body.status
+        if (body.status === 'active') updateData.startedAt = new Date()
+        if (body.status === 'completed') updateData.completedAt = new Date()
+      }
+      if (body.stats !== undefined) updateData.stats = JSON.stringify(body.stats)
+
+      const campaign = await db.campaign.update({ where: { id: campaignId }, data: updateData })
+      return NextResponse.json({ campaign })
+    }
+
+    // Supabase REST API fallback
+    console.log('[CampaignDetail/PATCH] Prisma unreachable, using Supabase REST API fallback')
+    const existing = await findCampaignById(campaignId)
     if (!existing) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
     await requireWorkspaceAccess(existing.workspaceId)
 
@@ -54,12 +93,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (body.templateBody !== undefined) updateData.templateBody = body.templateBody
     if (body.status !== undefined) {
       updateData.status = body.status
-      if (body.status === 'active') updateData.startedAt = new Date()
-      if (body.status === 'completed') updateData.completedAt = new Date()
+      if (body.status === 'active') updateData.startedAt = new Date().toISOString()
+      if (body.status === 'completed') updateData.completedAt = new Date().toISOString()
     }
     if (body.stats !== undefined) updateData.stats = JSON.stringify(body.stats)
 
-    const campaign = await db.campaign.update({ where: { id: campaignId }, data: updateData })
+    const campaign = await updateCampaign(campaignId, updateData)
+    if (!campaign) {
+      return NextResponse.json({ error: 'Failed to update campaign' }, { status: 500 })
+    }
+
     return NextResponse.json({ campaign })
   } catch (error: any) {
     if (error?.message === 'Authentication required') {

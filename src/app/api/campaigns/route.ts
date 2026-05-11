@@ -1,7 +1,6 @@
-import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
-import { isPrismaReachable, findMany } from '@/lib/db-supabase'
+import { isPrismaReachable, findMany, createCampaign } from '@/lib/db-supabase'
 
 export async function GET(request: NextRequest) {
   const workspaceId = request.nextUrl.searchParams.get('workspaceId')
@@ -18,6 +17,7 @@ export async function GET(request: NextRequest) {
 
   try {
     if (await isPrismaReachable()) {
+      const { db } = await import('@/lib/db')
       const campaigns = await db.campaign.findMany({
         where: { workspaceId },
         include: { _count: { select: { campaignMessages: true } } },
@@ -50,18 +50,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'workspaceId required' }, { status: 400 })
     }
     await requireWorkspaceAccess(body.workspaceId)
-    const campaign = await db.campaign.create({
-      data: {
-        workspaceId: body.workspaceId,
-        name: body.name,
-        description: body.description || '',
-        segmentQuery: JSON.stringify(body.segmentQuery || {}),
-        channel: body.channel || 'whatsapp',
-        templateBody: body.templateBody || '',
-        status: body.status || 'draft',
-        stats: JSON.stringify({ sent: 0, delivered: 0, opened: 0, clicked: 0, converted: 0 }),
-      },
+
+    if (await isPrismaReachable()) {
+      const { db } = await import('@/lib/db')
+      const campaign = await db.campaign.create({
+        data: {
+          workspaceId: body.workspaceId,
+          name: body.name,
+          description: body.description || '',
+          segmentQuery: JSON.stringify(body.segmentQuery || {}),
+          channel: body.channel || 'whatsapp',
+          templateBody: body.templateBody || '',
+          status: body.status || 'draft',
+          stats: JSON.stringify({ sent: 0, delivered: 0, opened: 0, clicked: 0, converted: 0 }),
+        },
+      })
+      return NextResponse.json({ campaign }, { status: 201 })
+    }
+
+    // Supabase REST API fallback
+    console.log('[Campaigns/POST] Prisma unreachable, using Supabase REST API fallback')
+    const campaign = await createCampaign(body.workspaceId, {
+      name: body.name,
+      description: body.description || '',
+      segmentQuery: JSON.stringify(body.segmentQuery || {}),
+      channel: body.channel || 'whatsapp',
+      templateBody: body.templateBody || '',
+      status: body.status || 'draft',
+      stats: JSON.stringify({ sent: 0, delivered: 0, opened: 0, clicked: 0, converted: 0 }),
     })
+
+    if (!campaign) {
+      return NextResponse.json({ error: 'Failed to create campaign' }, { status: 500 })
+    }
+
     return NextResponse.json({ campaign }, { status: 201 })
   } catch (error: any) {
     if (error?.message === 'Authentication required') {

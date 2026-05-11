@@ -1106,3 +1106,258 @@ export async function findTelegramCommands(workspaceId: string, limit: number = 
   }
   return data || []
 }
+
+// ─── Google Calendar Config operations ──────────────────────
+
+export async function findGoogleCalendarConfig(workspaceId: string): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('google_calendar_configs')
+    .select('*')
+    .eq('workspaceId', workspaceId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[db-supabase] findGoogleCalendarConfig error:', error.message)
+    return null
+  }
+  return data
+}
+
+export async function createGoogleCalendarConfig(workspaceId: string, config: Record<string, any>): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('google_calendar_configs')
+    .insert({ workspaceId, ...config })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('[db-supabase] createGoogleCalendarConfig error:', error.message)
+    return null
+  }
+  return data
+}
+
+export async function updateGoogleCalendarConfig(workspaceId: string, updates: Record<string, any>): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('google_calendar_configs')
+    .update(updates)
+    .eq('workspaceId', workspaceId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('[db-supabase] updateGoogleCalendarConfig error:', error.message)
+    return null
+  }
+  return data
+}
+
+export async function deleteGoogleCalendarConfig(workspaceId: string): Promise<boolean> {
+  const { error } = await getAdminClient()
+    .from('google_calendar_configs')
+    .delete()
+    .eq('workspaceId', workspaceId)
+
+  if (error) {
+    console.error('[db-supabase] deleteGoogleCalendarConfig error:', error.message)
+    return false
+  }
+  return true
+}
+
+// ─── Campaign operations ────────────────────────────────────
+
+export async function findCampaigns(workspaceId: string, status?: string): Promise<any[]> {
+  let query = getAdminClient()
+    .from('campaigns')
+    .select('*')
+    .eq('workspaceId', workspaceId)
+    .order('createdAt', { ascending: false })
+
+  if (status) {
+    query = query.eq('status', status)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('[db-supabase] findCampaigns error:', error.message)
+    return []
+  }
+  return (data || []).map((c: any) => ({
+    ...c,
+    _count: { campaignMessages: 0 },
+  }))
+}
+
+export async function findCampaignById(campaignId: string): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('campaigns')
+    .select('*')
+    .eq('id', campaignId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[db-supabase] findCampaignById error:', error.message)
+    return null
+  }
+  return data
+}
+
+export async function findCampaignWithMessages(campaignId: string): Promise<any | null> {
+  const campaign = await findCampaignById(campaignId)
+  if (!campaign) return null
+
+  const { data: messages, error } = await getAdminClient()
+    .from('campaign_messages')
+    .select('*')
+    .eq('campaignId', campaignId)
+    .order('createdAt', { ascending: false })
+    .limit(20)
+
+  if (error) {
+    console.error('[db-supabase] findCampaignWithMessages messages error:', error.message)
+    return { ...campaign, campaignMessages: [] }
+  }
+  return { ...campaign, campaignMessages: messages || [] }
+}
+
+export async function createCampaign(workspaceId: string, data: Record<string, any>): Promise<any | null> {
+  const { data: result, error } = await getAdminClient()
+    .from('campaigns')
+    .insert({ workspaceId, ...data })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('[db-supabase] createCampaign error:', error.message)
+    return null
+  }
+  return result
+}
+
+export async function updateCampaign(campaignId: string, data: Record<string, any>): Promise<any | null> {
+  const { data: result, error } = await getAdminClient()
+    .from('campaigns')
+    .update(data)
+    .eq('id', campaignId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('[db-supabase] updateCampaign error:', error.message)
+    return null
+  }
+  return result
+}
+
+export async function deleteCampaignAndMessages(campaignId: string): Promise<boolean> {
+  // Delete campaign messages first
+  const { error: msgError } = await getAdminClient()
+    .from('campaign_messages')
+    .delete()
+    .eq('campaignId', campaignId)
+
+  if (msgError) {
+    console.error('[db-supabase] deleteCampaignAndMessages messages error:', msgError.message)
+    // Continue anyway to try deleting campaign
+  }
+
+  const { error } = await getAdminClient()
+    .from('campaigns')
+    .delete()
+    .eq('id', campaignId)
+
+  if (error) {
+    console.error('[db-supabase] deleteCampaignAndMessages error:', error.message)
+    return false
+  }
+  return true
+}
+
+export async function createNotification(workspaceId: string, data: { type: string; title: string; description: string }): Promise<any | null> {
+  const { data: result, error } = await getAdminClient()
+    .from('notifications')
+    .insert({ workspaceId, ...data })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('[db-supabase] createNotification error:', error.message)
+    return null
+  }
+  return result
+}
+
+export async function createCampaignMessages(messages: Array<Record<string, any>>): Promise<boolean> {
+  if (messages.length === 0) return true
+
+  const { error } = await getAdminClient()
+    .from('campaign_messages')
+    .insert(messages)
+
+  if (error) {
+    console.error('[db-supabase] createCampaignMessages error:', error.message)
+    return false
+  }
+  return true
+}
+
+export async function updateCampaignMessages(campaignId: string, contactId: string, data: Record<string, any>): Promise<boolean> {
+  const { error } = await getAdminClient()
+    .from('campaign_messages')
+    .update(data)
+    .eq('campaignId', campaignId)
+    .eq('contactId', contactId)
+
+  if (error) {
+    console.error('[db-supabase] updateCampaignMessages error:', error.message)
+    return false
+  }
+  return true
+}
+
+export async function findContacts(workspaceId: string, filters: Record<string, any> = {}): Promise<any[]> {
+  let query = getAdminClient()
+    .from('contacts')
+    .select('id, name, phone, email, metadata')
+    .eq('workspaceId', workspaceId)
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null) {
+      if (typeof value === 'object' && value.gte !== undefined) {
+        query = query.gte(key, value.gte)
+      } else {
+        query = query.eq(key, value)
+      }
+    }
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('[db-supabase] findContacts error:', error.message)
+    return []
+  }
+  return data || []
+}
+
+export async function findApprovedWhatsAppTemplate(workspaceId: string, templateId?: string): Promise<any | null> {
+  let query = getAdminClient()
+    .from('whatsapp_templates')
+    .select('*')
+    .eq('workspaceId', workspaceId)
+    .eq('status', 'APPROVED')
+
+  if (templateId) {
+    query = query.eq('id', templateId)
+  }
+
+  const { data, error } = await query.limit(1).maybeSingle()
+
+  if (error) {
+    console.error('[db-supabase] findApprovedWhatsAppTemplate error:', error.message)
+    return null
+  }
+  return data
+}
