@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { isPrismaReachable, findMany } from '@/lib/db-supabase'
 import { NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
 
@@ -20,10 +21,16 @@ export async function GET(request: Request) {
   }
 
   try {
-    const costs = await db.aICostTracking.findMany({
-      where: { workspaceId },
-      orderBy: { createdAt: 'desc' },
-    })
+    let costs
+
+    if (await isPrismaReachable()) {
+      costs = await db.aICostTracking.findMany({
+        where: { workspaceId },
+        orderBy: { createdAt: 'desc' },
+      })
+    } else {
+      costs = await findMany('ai_cost_tracking', { workspaceId }, { orderBy: 'createdAt', orderAsc: false, limit: 50 })
+    }
 
     return NextResponse.json(costs)
   } catch (error: any) {

@@ -25,6 +25,8 @@ const publicRoutes = [
   "/api/telegram/webhook",
   "/api/seed",
   "/api/health",
+  "/api/migrate",
+  "/api/whatsapp/evolution",
 ]
 
 // Routes that should redirect away if already authenticated
@@ -122,3 +124,4 @@ export const config = {
     "/((?!_next/static|_next/image|favicon\\.ico|logo\\.svg|robots\\.txt).*)",
   ],
 }
+// Build: Mon May 11 03:19:58 UTC 2026

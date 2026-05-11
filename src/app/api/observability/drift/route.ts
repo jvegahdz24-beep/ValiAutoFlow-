@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { isPrismaReachable, findMany } from '@/lib/db-supabase'
 import { NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
 
@@ -20,10 +21,16 @@ export async function GET(request: Request) {
   }
 
   try {
-    const driftEvents = await db.behavioralTrace.findMany({
-      where: { workspaceId },
-      orderBy: { createdAt: 'desc' },
-    })
+    let driftEvents
+
+    if (await isPrismaReachable()) {
+      driftEvents = await db.behavioralTrace.findMany({
+        where: { workspaceId },
+        orderBy: { createdAt: 'desc' },
+      })
+    } else {
+      driftEvents = await findMany('behavioral_traces', { workspaceId }, { orderBy: 'createdAt', orderAsc: false, limit: 50 })
+    }
 
     return NextResponse.json(driftEvents)
   } catch (error: any) {

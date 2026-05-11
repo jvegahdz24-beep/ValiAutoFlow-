@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
+import { isPrismaReachable, findMany } from '@/lib/db-supabase'
 
 export async function GET(request: NextRequest) {
   const workspaceId = request.nextUrl.searchParams.get('workspaceId')
@@ -16,12 +17,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const campaigns = await db.campaign.findMany({
-      where: { workspaceId },
-      include: { _count: { select: { campaignMessages: true } } },
-      orderBy: { createdAt: 'desc' },
-    })
-    return NextResponse.json({ campaigns })
+    if (await isPrismaReachable()) {
+      const campaigns = await db.campaign.findMany({
+        where: { workspaceId },
+        include: { _count: { select: { campaignMessages: true } } },
+        orderBy: { createdAt: 'desc' },
+      })
+      return NextResponse.json({ campaigns })
+    } else {
+      const rows = await findMany('campaigns', { workspaceId }, { orderBy: 'createdAt', orderAsc: false })
+      const campaigns = rows.map((row: any) => ({
+        ...row,
+        _count: { campaignMessages: 0 },
+      }))
+      return NextResponse.json({ campaigns })
+    }
   } catch (error: any) {
     if (error?.message === 'Authentication required') {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })

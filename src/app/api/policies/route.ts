@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
+import { isPrismaReachable, findMany } from '@/lib/db-supabase'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -20,12 +21,18 @@ export async function GET(request: Request) {
   }
 
   try {
-    const policies = await db.salesPolicy.findMany({
-      where: { workspaceId },
-      orderBy: { createdAt: 'desc' },
-    })
+    if (await isPrismaReachable()) {
+      const policies = await db.salesPolicy.findMany({
+        where: { workspaceId },
+        orderBy: { createdAt: 'desc' },
+      })
 
-    return NextResponse.json(policies)
+      return NextResponse.json(policies)
+    } else {
+      const policies = await findMany('sales_policies', { workspaceId }, { orderBy: 'priority', orderAsc: true })
+
+      return NextResponse.json(policies)
+    }
   } catch (error: any) {
     if (error?.message === 'Authentication required') {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })

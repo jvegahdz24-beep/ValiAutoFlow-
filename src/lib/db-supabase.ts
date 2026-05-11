@@ -887,3 +887,222 @@ export async function upsertWorkspaceConfig(workspaceId: string, config: Record<
   }
   return data
 }
+
+// ─── WhatsApp Config operations ─────────────────────────────
+
+/**
+ * Filter config fields to only include columns that definitely exist in the DB.
+ * New columns (channelName, connectionType, etc.) may not have been added yet.
+ */
+const BASIC_WHATSAPP_COLUMNS = new Set([
+  'id', 'workspaceId', 'phoneNumberId', 'businessAccountId', 'accessToken',
+  'verifyToken', 'wabaId', 'isActive', 'webhookUrl', 'lastSyncAt',
+  'createdAt', 'updatedAt',
+])
+
+const ALL_WHATSAPP_COLUMNS = new Set([
+  ...BASIC_WHATSAPP_COLUMNS,
+  'channelName', 'connectionType', 'evolutionInstanceName', 'evolutionConnected',
+])
+
+function filterWhatsAppConfigFields(config: Record<string, any>): Record<string, any> {
+  const filtered: Record<string, any> = {}
+  for (const [key, value] of Object.entries(config)) {
+    if (ALL_WHATSAPP_COLUMNS.has(key)) {
+      filtered[key] = value
+    }
+  }
+  return filtered
+}
+
+function filterBasicWhatsAppFields(config: Record<string, any>): Record<string, any> {
+  const filtered: Record<string, any> = {}
+  for (const [key, value] of Object.entries(config)) {
+    if (BASIC_WHATSAPP_COLUMNS.has(key)) {
+      filtered[key] = value
+    }
+  }
+  return filtered
+}
+
+export async function findWhatsAppConfig(workspaceId: string): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('whatsapp_configs')
+    .select('*')
+    .eq('workspaceId', workspaceId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[db-supabase] findWhatsAppConfig error:', error.message)
+    return null
+  }
+  return data
+}
+
+export async function upsertWhatsAppConfig(workspaceId: string, config: Record<string, any>): Promise<any | null> {
+  const existing = await findWhatsAppConfig(workspaceId)
+  
+  // Filter out columns that don't exist in the table yet
+  // Only send columns that are known to exist in the whatsapp_configs table
+  const safeConfig = filterWhatsAppConfigFields(config)
+  
+  if (existing) {
+    const { data, error } = await getAdminClient()
+      .from('whatsapp_configs')
+      .update(safeConfig)
+      .eq('workspaceId', workspaceId)
+      .select()
+      .single()
+    if (error) {
+      console.error('[db-supabase] upsertWhatsAppConfig update error:', error.message)
+      // If new columns don't exist, try with only basic columns
+      const basicConfig = filterBasicWhatsAppFields(config)
+      const { data: basicData, error: basicError } = await getAdminClient()
+        .from('whatsapp_configs')
+        .update(basicConfig)
+        .eq('workspaceId', workspaceId)
+        .select()
+        .single()
+      if (basicError) {
+        console.error('[db-supabase] upsertWhatsAppConfig basic update error:', basicError.message)
+        return null
+      }
+      return { ...basicData, ...config } // Merge with requested values
+    }
+    return data
+  }
+  const { data, error } = await getAdminClient()
+    .from('whatsapp_configs')
+    .insert({ workspaceId, ...safeConfig })
+    .select()
+    .single()
+  if (error) {
+    console.error('[db-supabase] upsertWhatsAppConfig create error:', error.message)
+    // Try with basic columns only
+    const basicConfig = filterBasicWhatsAppFields(config)
+    const { data: basicData, error: basicError } = await getAdminClient()
+      .from('whatsapp_configs')
+      .insert({ workspaceId, ...basicConfig })
+      .select()
+      .single()
+    if (basicError) {
+      console.error('[db-supabase] upsertWhatsAppConfig basic create error:', basicError.message)
+      return null
+    }
+    return { ...basicData, ...config }
+  }
+  return data
+}
+
+export async function deleteWhatsAppConfig(workspaceId: string): Promise<boolean> {
+  const { error } = await getAdminClient()
+    .from('whatsapp_configs')
+    .delete()
+    .eq('workspaceId', workspaceId)
+
+  if (error) {
+    console.error('[db-supabase] deleteWhatsAppConfig error:', error.message)
+    return false
+  }
+  return true
+}
+
+export async function findWhatsAppTemplates(workspaceId: string): Promise<any[]> {
+  const { data, error } = await getAdminClient()
+    .from('whatsapp_templates')
+    .select('*')
+    .eq('workspaceId', workspaceId)
+    .order('createdAt', { ascending: false })
+
+  if (error) {
+    console.error('[db-supabase] findWhatsAppTemplates error:', error.message)
+    return []
+  }
+  return data || []
+}
+
+// ─── Telegram Config operations ──────────────────────────────
+
+export async function findTelegramConfig(workspaceId: string): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('telegram_bot_configs')
+    .select('*')
+    .eq('workspaceId', workspaceId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[db-supabase] findTelegramConfig error:', error.message)
+    return null
+  }
+  return data
+}
+
+export async function upsertTelegramConfig(workspaceId: string, config: Record<string, any>): Promise<any | null> {
+  const existing = await findTelegramConfig(workspaceId)
+  if (existing) {
+    const { data, error } = await getAdminClient()
+      .from('telegram_bot_configs')
+      .update(config)
+      .eq('workspaceId', workspaceId)
+      .select()
+      .single()
+    if (error) {
+      console.error('[db-supabase] upsertTelegramConfig update error:', error.message)
+      return null
+    }
+    return data
+  }
+  const { data, error } = await getAdminClient()
+    .from('telegram_bot_configs')
+    .insert({ workspaceId, ...config })
+    .select()
+    .single()
+  if (error) {
+    console.error('[db-supabase] upsertTelegramConfig create error:', error.message)
+    return null
+  }
+  return data
+}
+
+export async function deleteTelegramConfig(workspaceId: string): Promise<boolean> {
+  const { error } = await getAdminClient()
+    .from('telegram_bot_configs')
+    .delete()
+    .eq('workspaceId', workspaceId)
+
+  if (error) {
+    console.error('[db-supabase] deleteTelegramConfig error:', error.message)
+    return false
+  }
+  return true
+}
+
+export async function findTelegramSessions(workspaceId: string): Promise<any[]> {
+  const { data, error } = await getAdminClient()
+    .from('telegram_bot_sessions')
+    .select('*')
+    .eq('workspaceId', workspaceId)
+    .order('updatedAt', { ascending: false })
+    .limit(10)
+
+  if (error) {
+    console.error('[db-supabase] findTelegramSessions error:', error.message)
+    return []
+  }
+  return data || []
+}
+
+export async function findTelegramCommands(workspaceId: string, limit: number = 50): Promise<any[]> {
+  const { data, error } = await getAdminClient()
+    .from('telegram_bot_commands')
+    .select('*')
+    .eq('workspaceId', workspaceId)
+    .order('createdAt', { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    console.error('[db-supabase] findTelegramCommands error:', error.message)
+    return []
+  }
+  return data || []
+}

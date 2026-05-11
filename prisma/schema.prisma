@@ -964,14 +964,18 @@ model TelegramBotCommand {
 model WhatsAppConfig {
   id              String   @id @default(cuid())
   workspaceId     String   @unique
-  phoneNumberId   String   // Meta Phone Number ID
+  phoneNumberId   String   @default("") // Meta Phone Number ID (empty for Evolution API)
   businessAccountId String?
-  accessToken     String   // Permanent access token
-  verifyToken     String   // Webhook verification token
+  accessToken     String   @default("") // Permanent access token (empty for Evolution API)
+  verifyToken     String   @default("") // Webhook verification token
   wabaId          String?  // WhatsApp Business Account ID
   isActive        Boolean  @default(false)
   webhookUrl      String?
   lastSyncAt      DateTime?
+  channelName     String?  // Display name for this channel (e.g. "bielys")
+  connectionType  String?  @default("meta") // "meta" or "evolution"
+  evolutionInstanceName String? // Evolution API instance name
+  evolutionConnected   Boolean  @default(false) // Whether Evolution API is connected
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
