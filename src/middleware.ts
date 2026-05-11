@@ -27,6 +27,9 @@ const publicRoutes = [
   "/api/health",
   "/api/migrate",
   "/api/whatsapp/evolution",
+  "/api/whatsapp/qr",
+  "/api/whatsapp/status",
+  "/api/whatsapp/disconnect",
 ]
 
 // Routes that should redirect away if already authenticated
@@ -124,4 +127,4 @@ export const config = {
     "/((?!_next/static|_next/image|favicon\\.ico|logo\\.svg|robots\\.txt).*)",
   ],
 }
-// Build: Mon May 11 03:19:58 UTC 2026
+// Build: Mon May 11 05:05:00 UTC 2026
