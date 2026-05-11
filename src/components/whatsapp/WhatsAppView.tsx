@@ -91,89 +91,118 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
 
   // ─── Baileys QR Code Connection Flow ─────────────────────
 
+  /**
+   * Safe JSON fetch — handles empty responses, non-JSON, and network errors.
+   * Returns { ok, data, error } instead of throwing.
+   */
+  const safeFetch = useCallback(async (url: string, options?: RequestInit): Promise<{
+    ok: boolean
+    data: any
+    error: string | null
+  }> => {
+    try {
+      const res = await fetch(url, options)
+      const text = await res.text()
+      let data: any = null
+      try {
+        data = text ? JSON.parse(text) : null
+      } catch {
+        return {
+          ok: false,
+          data: null,
+          error: `El servidor devolvió una respuesta inválida (status ${res.status}). Esto suele ocurrir cuando Baileys no puede iniciar en el entorno serverless.`,
+        }
+      }
+      if (!res.ok) {
+        return { ok: false, data, error: data?.error || `Error del servidor (${res.status})` }
+      }
+      return { ok: true, data, error: null }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return { ok: false, data: null, error: 'La petición fue cancelada por timeout.' }
+      }
+      return { ok: false, data: null, error: `Error de red: ${err.message}. Verifica tu conexión a internet.` }
+    }
+  }, [])
+
   const generateBaileysQR = useCallback(async () => {
     setIsConnecting(true)
     setQrCode(null)
     setPairingCode(null)
     setBaileysStatus('connecting')
 
-    try {
-      const res = await fetch('/api/whatsapp/qr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId }),
+    const { ok, data, error } = await safeFetch('/api/whatsapp/qr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspaceId }),
+    })
+
+    if (!ok || !data) {
+      const msg = error || 'No se recibió respuesta del servidor'
+      toast.error('Error al generar QR', {
+        description: msg,
       })
-
-      const result = await res.json()
-
-      if (!res.ok) {
-        toast.error(result.error || 'Error generando QR')
-        setBaileysStatus('disconnected')
-        setIsConnecting(false)
-        return
-      }
-
-      if (result.status === 'connected') {
-        setBaileysStatus('connected')
-        setBaileysPhone(result.phone || null)
-        setIsConnecting(false)
-        toast.success('WhatsApp ya está conectado')
-        queryClient.invalidateQueries({ queryKey: ['whatsapp', workspaceId] })
-        return
-      }
-
-      if (result.qr) {
-        // QR image is already a data URL from the server
-        setQrCode(result.qr.startsWith('data:') ? result.qr : `data:image/png;base64,${result.qr}`)
-        setBaileysStatus('qr_ready')
-      }
-
-      if (result.pairingCode) {
-        setPairingCode(result.pairingCode)
-      }
-
-      // Start polling for connection status
-      startStatusPolling()
-    } catch (err: any) {
-      toast.error('Error de conexión', { description: err.message })
       setBaileysStatus('disconnected')
       setIsConnecting(false)
+      return
     }
-  }, [workspaceId, queryClient])
+
+    if (data.status === 'connected') {
+      setBaileysStatus('connected')
+      setBaileysPhone(data.phone || null)
+      setIsConnecting(false)
+      toast.success('WhatsApp ya está conectado')
+      queryClient.invalidateQueries({ queryKey: ['whatsapp', workspaceId] })
+      return
+    }
+
+    if (data.qr) {
+      // QR image is already a data URL from the server
+      setQrCode(data.qr.startsWith('data:') ? data.qr : `data:image/png;base64,${data.qr}`)
+      setBaileysStatus('qr_ready')
+    }
+
+    if (data.pairingCode) {
+      setPairingCode(data.pairingCode)
+    }
+
+    // Start polling for connection status
+    startStatusPolling()
+  }, [workspaceId, queryClient, safeFetch])
 
   const refreshBaileysQR = useCallback(async () => {
     setIsConnecting(true)
-    try {
-      const res = await fetch('/api/whatsapp/qr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId }),
-      })
-      const result = await res.json()
+    const { ok, data, error } = await safeFetch('/api/whatsapp/qr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspaceId }),
+    })
 
-      if (result.status === 'connected') {
-        setBaileysStatus('connected')
-        setQrCode(null)
-        setPairingCode(null)
-        setIsConnecting(false)
-        toast.success('WhatsApp conectado')
-        queryClient.invalidateQueries({ queryKey: ['whatsapp', workspaceId] })
-        return
-      }
-
-      if (result.qr) {
-        setQrCode(result.qr.startsWith('data:') ? result.qr : `data:image/png;base64,${result.qr}`)
-        setBaileysStatus('qr_ready')
-      }
-      if (result.pairingCode) {
-        setPairingCode(result.pairingCode)
-      }
-    } catch (err: any) {
-      toast.error('Error refrescando QR', { description: err.message })
-    } finally {
+    if (!ok || !data) {
+      toast.error('Error refrescando QR', { description: error || 'Respuesta inválida del servidor' })
       setIsConnecting(false)
+      return
     }
-  }, [workspaceId, queryClient])
+
+    if (data.status === 'connected') {
+      setBaileysStatus('connected')
+      setQrCode(null)
+      setPairingCode(null)
+      setIsConnecting(false)
+      toast.success('WhatsApp conectado')
+      queryClient.invalidateQueries({ queryKey: ['whatsapp', workspaceId] })
+      return
+    }
+
+    if (data.qr) {
+      setQrCode(data.qr.startsWith('data:') ? data.qr : `data:image/png;base64,${data.qr}`)
+      setBaileysStatus('qr_ready')
+    }
+    if (data.pairingCode) {
+      setPairingCode(data.pairingCode)
+    }
+    setIsConnecting(false)
+  }, [workspaceId, queryClient, safeFetch])
 
   // ─── Status Polling ──────────────────────────────────────
 
@@ -186,7 +215,10 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`/api/whatsapp/status?workspaceId=${workspaceId}`)
-        const data = await res.json()
+        const text = await res.text()
+        if (!text) return // Empty response, keep polling
+        let data: any
+        try { data = JSON.parse(text) } catch { return } // Invalid JSON, keep polling
 
         if (data.connected) {
           setBaileysStatus('connected')
@@ -227,7 +259,10 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
       const checkInitialStatus = async () => {
         try {
           const res = await fetch(`/api/whatsapp/status?workspaceId=${workspaceId}`)
-          const data = await res.json()
+          const text = await res.text()
+          if (!text) return
+          let data: any
+          try { data = JSON.parse(text) } catch { return }
           if (data.connected) {
             setBaileysStatus('connected')
             setBaileysPhone(data.phone || null)
