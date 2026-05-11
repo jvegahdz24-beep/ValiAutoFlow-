@@ -13,31 +13,42 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
  * Get the service role key, supporting base64-encoded fallback.
  * Some hosting platforms (Vercel) may mangle JWT characters in env vars,
  * so we also accept SUPABASE_SERVICE_ROLE_KEY_B64 (base64-encoded).
+ * 
+ * IMPORTANT: This reads env vars at CALL TIME (not module load time)
+ * to avoid stale cached values in serverless environments.
  */
 function getServiceRoleKey(): string {
-  const raw = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   const b64 = process.env.SUPABASE_SERVICE_ROLE_KEY_B64 || ''
+  const raw = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
   // If base64 version is provided, decode it (takes priority)
   if (b64) {
     try {
       const decoded = Buffer.from(b64, 'base64').toString('utf-8')
-      if (decoded.startsWith('eyJ')) return decoded
-    } catch {}
+      if (decoded.startsWith('eyJ')) {
+        console.log('[db-supabase] Using B64-decoded service_role key, len:', decoded.length)
+        return decoded
+      }
+    } catch (e: any) {
+      console.error('[db-supabase] B64 decode failed:', e.message)
+    }
   }
 
   return raw
 }
 
-const serviceRoleKey = getServiceRoleKey()
-
 let _adminClient: SupabaseClient | null = null
+let _cachedKey = ''
 
 function getAdminClient(): SupabaseClient {
-  if (!_adminClient) {
+  const serviceRoleKey = getServiceRoleKey()
+  
+  // Recreate client if key changed (e.g. after env var update)
+  if (!_adminClient || _cachedKey !== serviceRoleKey) {
     if (!supabaseUrl || !serviceRoleKey) {
       throw new Error('SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL not configured')
     }
+    console.log('[db-supabase] Creating admin client, key len:', serviceRoleKey.length, 'url:', supabaseUrl)
     _adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
       db: { schema: 'public' },
@@ -47,6 +58,7 @@ function getAdminClient(): SupabaseClient {
         },
       },
     })
+    _cachedKey = serviceRoleKey
   }
   return _adminClient
 }
@@ -781,8 +793,9 @@ export async function deleteRecord(table: string, id: string): Promise<boolean> 
 
 // ─── Raw fetch test (debug) ────────────────────────────────
 
-export async function rawFetchTest(): Promise<{success: boolean, detail: string}> {
+export async function rawFetchTest(): Promise<{success: boolean, detail: string, keyInfo?: any}> {
   try {
+    const serviceRoleKey = getServiceRoleKey()
     const url = supabaseUrl + '/rest/v1/users?select=id&limit=1'
     const res = await fetch(url, {
       headers: {
@@ -792,7 +805,18 @@ export async function rawFetchTest(): Promise<{success: boolean, detail: string}
       },
     })
     const text = await res.text()
-    return { success: res.ok, detail: text.substring(0, 200) }
+    return {
+      success: res.ok,
+      detail: text.substring(0, 200),
+      keyInfo: {
+        len: serviceRoleKey.length,
+        first10: serviceRoleKey.substring(0, 10),
+        last10: serviceRoleKey.slice(-10),
+        hexFirst20: Buffer.from(serviceRoleKey.substring(0, 20)).toString('hex'),
+        hasB64: !!(process.env.SUPABASE_SERVICE_ROLE_KEY_B64),
+        rawLen: (process.env.SUPABASE_SERVICE_ROLE_KEY || '').length,
+      }
+    }
   } catch (err: any) {
     return { success: false, detail: err.message }
   }
