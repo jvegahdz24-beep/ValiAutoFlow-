@@ -117,3 +117,35 @@ Stage Summary:
   - Auth state persists in Supabase → reconnection without new QR scan
   - For 24/7 persistent connection, need VPS/Railway server
 - Needs deployment to Vercel to test
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Fix "Unexpected end of JSON input" error on WhatsApp QR generation
+
+Work Log:
+- Diagnosed: The "Unexpected end of JSON input" error occurs because WhatsAppView.tsx
+  uses res.json() directly, which throws when the server returns an empty or non-JSON
+  response (e.g., when Baileys crashes silently in serverless)
+- Created safeFetch() helper in WhatsAppView.tsx that:
+  - Uses res.text() first, then JSON.parse() manually
+  - Handles empty responses gracefully
+  - Returns descriptive error for non-JSON responses
+  - Provides user-friendly messages for network/timeout errors
+- Applied safeFetch to:
+  - generateBaileysQR (POST /api/whatsapp/qr)
+  - refreshBaileysQR (POST /api/whatsapp/qr)
+  - Status polling (GET /api/whatsapp/status) — silently continues on error
+  - checkInitialStatus (GET /api/whatsapp/status) — silently returns on error
+- Build passes successfully
+- Commits ready but NOT pushed to GitHub (no credentials in environment)
+
+Stage Summary:
+- All 5 fixes applied and committed locally:
+  1. serverExternalPackages in next.config.ts
+  2. maxDuration + dynamic on API routes
+  3. Removed @hapi/boom direct import, duck-typing fallback
+  4. safeFetch in WhatsAppView.tsx — eliminates "Unexpected end of JSON input"
+  5. @hapi/boom installed as direct dependency
+- User MUST push manually: git push origin main
+- Vercel will auto-deploy on push
