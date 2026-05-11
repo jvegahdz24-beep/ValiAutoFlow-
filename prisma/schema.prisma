@@ -973,9 +973,12 @@ model WhatsAppConfig {
   webhookUrl      String?
   lastSyncAt      DateTime?
   channelName     String?  // Display name for this channel (e.g. "bielys")
-  connectionType  String?  @default("meta") // "meta" or "evolution"
+  connectionType  String?  @default("meta") // "meta", "evolution", or "baileys"
   evolutionInstanceName String? // Evolution API instance name
   evolutionConnected   Boolean  @default(false) // Whether Evolution API is connected
+  baileysAuthState     String?  // Serialized Baileys auth state JSON (creds + keys)
+  baileysConnected     Boolean  @default(false) // Whether Baileys is connected
+  baileysPhone         String?  // Connected phone number from Baileys
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

@@ -903,6 +903,7 @@ const BASIC_WHATSAPP_COLUMNS = new Set([
 const ALL_WHATSAPP_COLUMNS = new Set([
   ...BASIC_WHATSAPP_COLUMNS,
   'channelName', 'connectionType', 'evolutionInstanceName', 'evolutionConnected',
+  'baileysAuthState', 'baileysConnected', 'baileysPhone',
 ])
 
 function filterWhatsAppConfigFields(config: Record<string, any>): Record<string, any> {

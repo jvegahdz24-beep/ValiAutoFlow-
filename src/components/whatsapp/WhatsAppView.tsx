@@ -12,11 +12,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Separator } from '@/components/ui/separator'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Smartphone, Shield, Send, Activity, CheckCircle2, XCircle, Loader2,
   ExternalLink, Trash2, MessageSquare, QrCode, RefreshCw, Wifi, WifiOff,
-  Zap, Settings2,
+  Zap, Settings2, Cable,
 } from 'lucide-react'
 
 interface WhatsAppConfig {
@@ -36,6 +36,8 @@ interface WhatsAppConfig {
   evolutionInstanceName?: string
   evolutionConnected?: boolean
   evolutionStatus?: string
+  baileysConnected?: boolean
+  baileysPhone?: string
 }
 
 interface WhatsAppTemplate {
@@ -55,7 +57,7 @@ interface WhatsAppData {
   evolutionConfigured?: boolean
 }
 
-type ConnectionMode = 'select' | 'evolution' | 'meta'
+type ConnectionMode = 'select' | 'baileys' | 'meta'
 
 export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
   const queryClient = useQueryClient()
@@ -66,9 +68,11 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
   const [channelName] = useState('bielys')
   const [qrCode, setQrCode] = useState<string | null>(null)
   const [pairingCode, setPairingCode] = useState<string | null>(null)
-  const [evolutionStatus, setEvolutionStatus] = useState<string | null>(null)
+  const [baileysStatus, setBaileysStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'qr_ready'>('disconnected')
   const [isConnecting, setIsConnecting] = useState(false)
-  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null)
+  const [baileysPhone, setBaileysPhone] = useState<string | null>(null)
+  const [baileysUserName, setBaileysUserName] = useState<string | null>(null)
+  const statusPollRef = useRef<NodeJS.Timeout | null>(null)
 
   const { data, isLoading, refetch } = useQuery<WhatsAppData>({
     queryKey: ['whatsapp', workspaceId],
@@ -84,161 +88,156 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
 
   const config = data?.config
   const templates = data?.templates || []
-  const evolutionConfigured = data?.evolutionConfigured || false
 
-  // ─── QR Code connection flow ─────────────────────────────
+  // ─── Baileys QR Code Connection Flow ─────────────────────
 
-  const startQRConnection = useCallback(async () => {
+  const generateBaileysQR = useCallback(async () => {
     setIsConnecting(true)
     setQrCode(null)
     setPairingCode(null)
-    setEvolutionStatus('connecting')
+    setBaileysStatus('connecting')
 
     try {
-      const res = await fetch('/api/whatsapp/evolution', {
+      const res = await fetch('/api/whatsapp/qr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create',
-          workspaceId,
-          channelName,
-        }),
+        body: JSON.stringify({ workspaceId }),
       })
 
       const result = await res.json()
 
       if (!res.ok) {
-        toast.error(result.error || 'Error creando instancia')
-        setEvolutionStatus('disconnected')
+        toast.error(result.error || 'Error generando QR')
+        setBaileysStatus('disconnected')
         setIsConnecting(false)
         return
       }
 
-      // Show QR code
-      if (result.qrcode) {
-        setQrCode(result.qrcode.startsWith('data:') ? result.qrcode : `data:image/png;base64,${result.qrcode}`)
+      if (result.status === 'connected') {
+        setBaileysStatus('connected')
+        setBaileysPhone(result.phone || null)
+        setIsConnecting(false)
+        toast.success('WhatsApp ya está conectado')
+        queryClient.invalidateQueries({ queryKey: ['whatsapp', workspaceId] })
+        return
       }
+
+      if (result.qr) {
+        // QR image is already a data URL from the server
+        setQrCode(result.qr.startsWith('data:') ? result.qr : `data:image/png;base64,${result.qr}`)
+        setBaileysStatus('qr_ready')
+      }
+
       if (result.pairingCode) {
         setPairingCode(result.pairingCode)
       }
-      setEvolutionStatus(result.status || 'connecting')
 
       // Start polling for connection status
-      const instanceName = result.instance?.instance?.instanceName || `ws_${workspaceId.slice(0, 8)}`
-      const interval = setInterval(async () => {
-        try {
-          const statusRes = await fetch('/api/whatsapp/evolution', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'status',
-              instanceName,
-              workspaceId,
-            }),
-          })
-          const statusData = await statusRes.json()
-
-          if (statusData.status === 'open') {
-            setEvolutionStatus('open')
-            setIsConnecting(false)
-            clearInterval(interval)
-            setPollInterval(null)
-            toast.success('WhatsApp conectado exitosamente', {
-              description: `Canal "${channelName}" está activo y listo para recibir mensajes.`,
-            })
-            queryClient.invalidateQueries({ queryKey: ['whatsapp', workspaceId] })
-          } else if (statusData.status === 'close' || statusData.status === 'disconnected') {
-            // Try to reconnect and get a fresh QR
-            const connectRes = await fetch('/api/whatsapp/evolution', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'connect',
-                instanceName,
-                workspaceId,
-              }),
-            })
-            const connectData = await connectRes.json()
-            if (connectData.qrcode) {
-              setQrCode(connectData.qrcode.startsWith('data:') ? connectData.qrcode : `data:image/png;base64,${connectData.qrcode}`)
-            }
-            if (connectData.pairingCode) {
-              setPairingCode(connectData.pairingCode)
-            }
-            setEvolutionStatus(connectData.status || 'connecting')
-          }
-        } catch {
-          // Silently continue polling
-        }
-      }, 5000)
-
-      setPollInterval(interval)
+      startStatusPolling()
     } catch (err: any) {
       toast.error('Error de conexión', { description: err.message })
-      setEvolutionStatus('disconnected')
+      setBaileysStatus('disconnected')
       setIsConnecting(false)
     }
-  }, [workspaceId, channelName, queryClient])
+  }, [workspaceId, queryClient])
 
-  const refreshQR = useCallback(async () => {
-    if (!config?.evolutionInstanceName) return
+  const refreshBaileysQR = useCallback(async () => {
     setIsConnecting(true)
-
     try {
-      const res = await fetch('/api/whatsapp/evolution', {
+      const res = await fetch('/api/whatsapp/qr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'connect',
-          instanceName: config.evolutionInstanceName,
-          workspaceId,
-        }),
+        body: JSON.stringify({ workspaceId }),
       })
       const result = await res.json()
-      if (result.qrcode) {
-        setQrCode(result.qrcode.startsWith('data:') ? result.qrcode : `data:image/png;base64,${result.qrcode}`)
+
+      if (result.status === 'connected') {
+        setBaileysStatus('connected')
+        setQrCode(null)
+        setPairingCode(null)
+        setIsConnecting(false)
+        toast.success('WhatsApp conectado')
+        queryClient.invalidateQueries({ queryKey: ['whatsapp', workspaceId] })
+        return
+      }
+
+      if (result.qr) {
+        setQrCode(result.qr.startsWith('data:') ? result.qr : `data:image/png;base64,${result.qr}`)
+        setBaileysStatus('qr_ready')
       }
       if (result.pairingCode) {
         setPairingCode(result.pairingCode)
       }
-      setEvolutionStatus(result.status || 'connecting')
     } catch (err: any) {
       toast.error('Error refrescando QR', { description: err.message })
     } finally {
       setIsConnecting(false)
     }
-  }, [config?.evolutionInstanceName, workspaceId])
+  }, [workspaceId, queryClient])
+
+  // ─── Status Polling ──────────────────────────────────────
+
+  const startStatusPolling = useCallback(() => {
+    // Clear existing poll
+    if (statusPollRef.current) {
+      clearInterval(statusPollRef.current)
+    }
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/whatsapp/status?workspaceId=${workspaceId}`)
+        const data = await res.json()
+
+        if (data.connected) {
+          setBaileysStatus('connected')
+          setBaileysPhone(data.phone || null)
+          setBaileysUserName(data.userName || null)
+          setQrCode(null)
+          setPairingCode(null)
+          setIsConnecting(false)
+          clearInterval(interval)
+          statusPollRef.current = null
+          toast.success('WhatsApp conectado exitosamente', {
+            description: data.phone ? `Número: ${data.phone}` : `Canal "${channelName}" está activo.`,
+          })
+          queryClient.invalidateQueries({ queryKey: ['whatsapp', workspaceId] })
+        } else if (data.status === 'qr_ready') {
+          setBaileysStatus('qr_ready')
+        } else if (data.status === 'connecting') {
+          setBaileysStatus('connecting')
+        }
+      } catch {
+        // Silently continue polling
+      }
+    }, 3000)
+
+    statusPollRef.current = interval
+  }, [workspaceId, channelName, queryClient])
 
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
-      if (pollInterval) clearInterval(pollInterval)
+      if (statusPollRef.current) clearInterval(statusPollRef.current)
     }
-  }, [pollInterval])
+  }, [])
 
-  // If config exists and has Evolution connection, check status
+  // If config exists and has Baileys connection, check initial status
   useEffect(() => {
-    if (config?.evolutionInstanceName && config?.connectionType === 'evolution' && evolutionConfigured) {
-      const checkStatus = async () => {
+    if (config?.connectionType === 'baileys' || (!config?.connectionType && config?.isActive)) {
+      const checkInitialStatus = async () => {
         try {
-          const res = await fetch('/api/whatsapp/evolution', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'status',
-              instanceName: config.evolutionInstanceName,
-              workspaceId,
-            }),
-          })
+          const res = await fetch(`/api/whatsapp/status?workspaceId=${workspaceId}`)
           const data = await res.json()
-          if (data.status) {
-            setEvolutionStatus(data.status)
+          if (data.connected) {
+            setBaileysStatus('connected')
+            setBaileysPhone(data.phone || null)
+            setBaileysUserName(data.userName || null)
           }
         } catch {}
       }
-      checkStatus()
+      checkInitialStatus()
     }
-  }, [config?.evolutionInstanceName, config?.connectionType, workspaceId, evolutionConfigured])
+  }, [config?.connectionType, config?.isActive, workspaceId])
 
   // ─── Meta Cloud API mutations ────────────────────────────
 
@@ -292,6 +291,14 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
+      // Disconnect Baileys first if connected
+      if (config?.connectionType === 'baileys' || !config?.connectionType) {
+        await fetch('/api/whatsapp/disconnect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspaceId, clearSession: true }),
+        }).catch(() => {})
+      }
       const res = await fetch(`/api/workspaces/${workspaceId}/whatsapp`, { method: 'DELETE' })
       if (!res.ok) {
         const err = await res.json()
@@ -303,7 +310,9 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
       toast.success('Configuración de WhatsApp eliminada')
       setQrCode(null)
       setPairingCode(null)
-      setEvolutionStatus(null)
+      setBaileysStatus('disconnected')
+      setBaileysPhone(null)
+      setBaileysUserName(null)
       setConnectionMode('select')
       queryClient.invalidateQueries({ queryKey: ['whatsapp', workspaceId] })
     },
@@ -342,14 +351,14 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
               </div>
               <h3 className="text-xl font-semibold">Conectar WhatsApp</h3>
               <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                Conecta tu WhatsApp Business para que JHON envíe y reciba mensajes reales.
+                Conecta tu WhatsApp para que JHON envíe y reciba mensajes reales.
                 Elige el método de conexión:
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto pt-4">
-                {/* QR Code Connection */}
+                {/* Baileys QR Code Connection */}
                 <button
-                  onClick={() => setConnectionMode('evolution')}
+                  onClick={() => setConnectionMode('baileys')}
                   className="rounded-xl border-2 border-green-500/30 bg-green-500/5 p-5 text-left hover:border-green-500/60 hover:bg-green-500/10 transition-all"
                 >
                   <div className="flex items-center gap-3 mb-3">
@@ -364,7 +373,7 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Escanea el QR con tu WhatsApp. Conexión instantánea sin configuración en Meta.
+                    Escanea el QR con tu WhatsApp. Conexión directa sin intermediarios.
                   </p>
                 </button>
 
@@ -410,14 +419,19 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
     )
   }
 
-  // ─── Evolution API (QR Code) Setup ────────────────────────
+  // ─── Baileys QR Code Setup ────────────────────────────────
 
-  if (connectionMode === 'evolution' && !config) {
+  if (connectionMode === 'baileys' && !config) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Conectar WhatsApp con QR</h2>
-          <Button variant="ghost" onClick={() => setConnectionMode('select')}>Cancelar</Button>
+          <Button variant="ghost" onClick={() => {
+            setConnectionMode('select')
+            setQrCode(null)
+            setPairingCode(null)
+            setBaileysStatus('disconnected')
+          }}>Cancelar</Button>
         </div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -432,28 +446,7 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {!evolutionConfigured ? (
-                <div className="text-center space-y-4 py-4">
-                  <div className="mx-auto w-16 h-16 rounded-2xl bg-amber-500/20 flex items-center justify-center">
-                    <Settings2 className="h-8 w-8 text-amber-400" />
-                  </div>
-                  <h3 className="text-sm font-semibold">Evolution API no configurada</h3>
-                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                    Para usar la conexión por QR, necesitas una instancia de Evolution API.
-                    Configura las variables de entorno <code className="text-foreground bg-muted px-1 rounded">EVOLUTION_API_URL</code> y{' '}
-                    <code className="text-foreground bg-muted px-1 rounded">EVOLUTION_API_KEY</code> en Vercel.
-                  </p>
-                  <ol className="text-xs text-muted-foreground text-left max-w-sm mx-auto space-y-1 list-decimal list-inside">
-                    <li>Instala Evolution API en un servidor (VPS, Docker, etc.)</li>
-                    <li>Obtén la URL y API Key</li>
-                    <li>Agrega las variables de entorno en Vercel</li>
-                    <li>Regresa aquí y conecta tu WhatsApp</li>
-                  </ol>
-                  <Button variant="outline" onClick={() => setConnectionMode('select')}>
-                    Usar Meta Cloud API en su lugar
-                  </Button>
-                </div>
-              ) : !qrCode ? (
+              {!qrCode ? (
                 <div className="text-center space-y-4 py-8">
                   <div className="mx-auto w-48 h-48 rounded-2xl border-2 border-dashed border-green-500/30 flex items-center justify-center">
                     <div className="text-center">
@@ -461,9 +454,15 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
                       <p className="text-xs text-muted-foreground">El QR aparecerá aquí</p>
                     </div>
                   </div>
+                  <div className="bg-muted/50 rounded-lg p-3 max-w-sm mx-auto">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Cable className="h-3.5 w-3.5 text-green-400" />
+                      <span>Conexión directa vía Baileys — sin servidor intermediario</span>
+                    </div>
+                  </div>
                   <Button
                     className="bg-green-600 hover:bg-green-700"
-                    onClick={startQRConnection}
+                    onClick={generateBaileysQR}
                     disabled={isConnecting}
                   >
                     {isConnecting ? (
@@ -489,7 +488,7 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
                           className="w-64 h-64 object-contain"
                         />
                       </div>
-                      {isConnecting && (
+                      {isConnecting && baileysStatus !== 'connected' && (
                         <div className="absolute inset-0 flex items-center justify-center">
                           <div className="rounded-full bg-background/80 p-3">
                             <Loader2 className="h-6 w-6 animate-spin text-green-400" />
@@ -510,13 +509,17 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
 
                     {/* Status */}
                     <div className="flex items-center gap-2">
-                      {evolutionStatus === 'open' ? (
+                      {baileysStatus === 'connected' ? (
                         <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
                           <CheckCircle2 className="h-3 w-3 mr-1" /> Conectado
                         </Badge>
-                      ) : (
+                      ) : baileysStatus === 'qr_ready' ? (
                         <Badge variant="outline" className="border-amber-500/30 text-amber-400">
                           <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Esperando escaneo...
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="border-blue-500/30 text-blue-400">
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Conectando...
                         </Badge>
                       )}
                     </div>
@@ -537,7 +540,7 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
                     <Button
                       variant="outline"
                       className="flex-1"
-                      onClick={refreshQR}
+                      onClick={refreshBaileysQR}
                       disabled={isConnecting}
                     >
                       <RefreshCw className="h-4 w-4 mr-2" /> Refrescar QR
@@ -545,7 +548,15 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
                     <Button
                       variant="ghost"
                       className="flex-1"
-                      onClick={() => setConnectionMode('select')}
+                      onClick={() => {
+                        setConnectionMode('select')
+                        setQrCode(null)
+                        setPairingCode(null)
+                        if (statusPollRef.current) {
+                          clearInterval(statusPollRef.current)
+                          statusPollRef.current = null
+                        }
+                      }}
                     >
                       Cancelar
                     </Button>
@@ -628,8 +639,9 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
 
   // ─── Connected State (config exists) ─────────────────────
 
-  const isConnected = config?.isActive || config?.evolutionConnected || evolutionStatus === 'open'
-  const isEvolution = config?.connectionType === 'evolution'
+  const isBaileys = config?.connectionType === 'baileys' || (!config?.connectionType && !config?.phoneNumberId)
+  const isMeta = config?.connectionType === 'meta'
+  const isConnected = config?.isActive || config?.evolutionConnected || baileysStatus === 'connected'
   const displayName = config?.channelName || 'bielys'
 
   return (
@@ -653,7 +665,7 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
           { label: 'Estado', value: isConnected ? 'Activo' : 'Inactivo', icon: Activity, color: isConnected ? 'text-green-400' : 'text-red-400' },
           { label: 'Canal', value: displayName, icon: Smartphone, color: 'text-green-400' },
           { label: 'Templates', value: templates.length, icon: MessageSquare, color: 'text-amber-400' },
-          { label: 'Conexión', value: isEvolution ? 'QR Code' : 'Meta API', icon: isEvolution ? QrCode : Shield, color: 'text-sky-400' },
+          { label: 'Conexión', value: isBaileys ? 'QR Directo' : isMeta ? 'Meta API' : 'QR Directo', icon: isBaileys ? QrCode : Shield, color: 'text-sky-400' },
         ].map((kpi, i) => {
           const Icon = kpi.icon
           return (
@@ -676,6 +688,26 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
         })}
       </div>
 
+      {/* Connected phone info for Baileys */}
+      {isBaileys && (baileysPhone || config?.baileysPhone) && (
+        <Card className="border-green-500/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-green-500/10 p-2">
+                <CheckCircle2 className="h-5 w-5 text-green-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">WhatsApp conectado</p>
+                <p className="text-xs text-muted-foreground">
+                  Número: {baileysPhone || config?.baileysPhone}
+                  {baileysUserName ? ` · Nombre: ${baileysUserName}` : ''}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="settings">
         <TabsList>
           <TabsTrigger value="settings">Configuración</TabsTrigger>
@@ -689,7 +721,7 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
             <CardHeader>
               <CardTitle className="text-sm">Control de Conexión</CardTitle>
               <CardDescription>
-                Canal: <b>{displayName}</b> · Método: {isEvolution ? 'Evolution API (QR)' : 'Meta Cloud API'}
+                Canal: <b>{displayName}</b> · Método: {isBaileys ? 'QR Directo (Baileys)' : 'Meta Cloud API'}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -728,7 +760,7 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm">Eliminar configuración de WhatsApp</p>
-                  <p className="text-xs text-muted-foreground">Se eliminará el webhook, la instancia y la configuración</p>
+                  <p className="text-xs text-muted-foreground">Se eliminará la sesión, la configuración y se desconectará el canal</p>
                 </div>
                 <Button
                   variant="destructive"
@@ -758,9 +790,9 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {isEvolution && config?.evolutionInstanceName ? (
+              {isBaileys ? (
                 <div className="flex flex-col items-center gap-4">
-                  {evolutionStatus === 'open' ? (
+                  {baileysStatus === 'connected' ? (
                     <div className="text-center space-y-3 py-4">
                       <div className="mx-auto w-16 h-16 rounded-2xl bg-green-500/20 flex items-center justify-center">
                         <Wifi className="h-8 w-8 text-green-400" />
@@ -769,12 +801,17 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
                       <p className="text-xs text-muted-foreground">
                         El canal <b>{displayName}</b> está activo y recibiendo mensajes.
                       </p>
+                      {(baileysPhone || config?.baileysPhone) && (
+                        <p className="text-xs text-muted-foreground">
+                          Número: <b>{baileysPhone || config?.baileysPhone}</b>
+                        </p>
+                      )}
                       <Button
                         variant="outline"
-                        onClick={refreshQR}
+                        onClick={refreshBaileysQR}
                         className="mt-2"
                       >
-                        <RefreshCw className="h-4 w-4 mr-2" /> Refrescar QR
+                        <RefreshCw className="h-4 w-4 mr-2" /> Generar nuevo QR
                       </Button>
                     </div>
                   ) : (
@@ -813,7 +850,7 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
 
                       <Button
                         className="bg-green-600 hover:bg-green-700"
-                        onClick={refreshQR}
+                        onClick={generateBaileysQR}
                         disabled={isConnecting}
                       >
                         {isConnecting ? (
@@ -841,11 +878,10 @@ export function WhatsAppView({ workspaceId }: { workspaceId: string }) {
                 <div className="text-center py-8 space-y-3">
                   <WifiOff className="h-10 w-10 text-muted-foreground mx-auto" />
                   <p className="text-sm text-muted-foreground">
-                    La conexión por QR requiere Evolution API.
+                    La conexión por QR requiere el modo Baileys.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Configura <code className="bg-muted px-1 rounded">EVOLUTION_API_URL</code> y{' '}
-                    <code className="bg-muted px-1 rounded">EVOLUTION_API_KEY</code> en las variables de entorno.
+                    Elimina la configuración actual y reconecta usando &quot;Código QR&quot;.
                   </p>
                 </div>
               )}
