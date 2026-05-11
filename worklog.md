@@ -70,3 +70,24 @@ Stage Summary:
 - Root cause: API returned `lead: null` in Supabase fallback → frontend crashed trying to read `.name`
 - All `.name` access points now protected with optional chaining + fallback defaults
 - Deployed to https://vali-auto-flow.vercel.app
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix "No se pudo guardar la configuración" on Activar JHON
+
+Work Log:
+- Diagnosed root cause: config endpoint only used Prisma (no Supabase REST fallback), so writes failed when Prisma can't connect (which is the case on Vercel with Supabase Pooler)
+- Rewrote /api/workspaces/[workspaceId]/config/route.ts with full Supabase REST API fallback for both GET and PUT
+- GET fallback: uses findWorkspaceConfig + upsertWorkspaceConfig to create default config if missing
+- PUT fallback: uses upsertWorkspaceConfig to update or create config via Supabase REST
+- Improved error messages in PUT endpoint to include actual error details
+- Fixed ReviewActivateStep.tsx: now parses server error response and shows descriptive message instead of generic "No se pudo guardar"
+- Fixed ConfigView: added error handling in useQuery, falls back to defaults if config load fails (so user can still save)
+- Build + deploy successful
+
+Stage Summary:
+- Config endpoint now works via Supabase REST API when Prisma is unreachable
+- Frontend shows meaningful error messages if save fails
+- ConfigView gracefully falls back to defaults if config can't be loaded
+- Deployed to https://vali-auto-flow.vercel.app

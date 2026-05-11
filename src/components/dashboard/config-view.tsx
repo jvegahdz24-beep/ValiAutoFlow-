@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { Settings } from 'lucide-react'
+import { Settings, AlertTriangle } from 'lucide-react'
 import { motion } from 'framer-motion'
 import ConfigWizard from '@/components/config/ConfigWizard'
 
@@ -51,12 +51,17 @@ function parseConfig(c: Record<string, unknown>): BusinessConfig {
 
 export function ConfigView({ workspaceId }: { workspaceId: string }) {
   // Fetch existing config
-  const { data: configData, isLoading } = useQuery({
+  const { data: configData, isLoading, error } = useQuery({
     queryKey: ['config', workspaceId],
     queryFn: async () => {
       const res = await fetch(`/api/workspaces/${workspaceId}/config`)
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => ({ error: 'Network error' }))
+        throw new Error(errorBody.error || `Config API error: ${res.status}`)
+      }
       return res.json()
     },
+    retry: 1,
   })
 
   if (isLoading) {
@@ -79,6 +84,11 @@ export function ConfigView({ workspaceId }: { workspaceId: string }) {
         </motion.div>
       </div>
     )
+  }
+
+  // If config fetch fails, still show wizard with defaults so user can save
+  if (error) {
+    console.warn('[ConfigView] Failed to load config, using defaults:', error.message)
   }
 
   const config = configData?.config

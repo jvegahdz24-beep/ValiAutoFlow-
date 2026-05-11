@@ -64,14 +64,17 @@ export default function ReviewActivateStep({ onPrev, workspaceId }: StepProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
       })
-      if (!res.ok) throw new Error('Error al guardar')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Error de conexión' }))
+        throw new Error(errorData.error || `Error ${res.status}`)
+      }
       setIsSaved(true)
       toast.success('Configuración guardada. JHON está listo para trabajar.', {
         description: 'Tu asistente comercial cognitivo está activo.',
       })
-    } catch {
+    } catch (err: any) {
       toast.error('No se pudo guardar la configuración', {
-        description: 'Intenta de nuevo en unos momentos.',
+        description: err?.message || 'Intenta de nuevo en unos momentos.',
       })
     } finally {
       setIsSaving(false)
