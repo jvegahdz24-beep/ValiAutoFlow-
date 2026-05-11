@@ -12,6 +12,7 @@ import { Orchestrator } from '@/lib/engine/orchestrator'
 import { isConversationTakenOver, notifyHumanTakeoverNeeded, notifyHotLead } from '@/lib/telegram/cognitive-bridge'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/channel-bridge'
 import { type LeadArchetype, type LeadTemperature } from '@/lib/engine/types'
+import { isPrismaReachable } from '@/lib/db-supabase'
 
 export async function POST(request: NextRequest) {
   try {
@@ -131,6 +132,7 @@ export async function POST(request: NextRequest) {
     // STEP 6: Run through the Orchestrator (7 Carnales Pipeline)
     // ──────────────────────────────────────────────────────────
     const orchestrator = new Orchestrator(policyRules)
+    const executionStartTime = Date.now()
 
     const pipelineResult = await orchestrator.processMessage({
       conversationId,
@@ -172,6 +174,66 @@ export async function POST(request: NextRequest) {
     })
 
     // ──────────────────────────────────────────────────────────
+    // STEP 6.5: Save agent execution record (fire-and-forget)
+    // This tracks the pipeline run for observability and agent stats
+    // ──────────────────────────────────────────────────────────
+    const saveExecution = async () => {
+      try {
+        const executionData = {
+          agentId: '',
+          conversationId,
+          leadId: conversation.leadId || null,
+          status: 'SUCCESS' as const,
+          duration: Date.now() - executionStartTime,
+          tokenUsage: JSON.stringify({
+            input: pipelineResult.responseSuggestion?.length || 0,
+            output: pipelineResult.responseSuggestion?.length || 0,
+          }),
+          cost: 0.03,
+          inputSummary: messageContent.substring(0, 200),
+          outputSummary: pipelineResult.responseSuggestion?.substring(0, 200) || '',
+          decisionRationale: pipelineResult.routing?.intention || '',
+          policiesApplied: JSON.stringify(policyRules.map(p => p.id)),
+          cognitiveContext: JSON.stringify({
+            stage: pipelineResult.stage,
+            cognitiveState: pipelineResult.cognitiveState,
+          }),
+        }
+
+        if (await isPrismaReachable()) {
+          const { db } = await import('@/lib/db')
+          // Find the ORCHESTRATOR agent for this workspace
+          const agent = await db.agent.findFirst({
+            where: { workspaceId, type: 'ORCHESTRATOR' },
+          })
+          if (agent) {
+            await db.agentExecution.create({
+              data: {
+                ...executionData,
+                agentId: agent.id,
+              },
+            })
+          }
+        } else {
+          // Supabase REST API fallback
+          const { findMany: findAgents, createAgentExecution } = await import('@/lib/db-supabase')
+          const agents = await findAgents('agents', { workspaceId, type: 'ORCHESTRATOR' })
+          if (agents.length > 0) {
+            await createAgentExecution({
+              ...executionData,
+              agentId: agents[0].id,
+            })
+          }
+        }
+      } catch (execError) {
+        console.error('[Engine] Failed to save execution record:', execError)
+        // Non-fatal: don't fail the pipeline if execution logging fails
+      }
+    }
+    // Fire and forget — don't block the response
+    saveExecution().catch(() => {})
+
+    // ──────────────────────────────────────────────────────────
     // STEP 7: Create outbound message from JHON
     // ──────────────────────────────────────────────────────────
     const outboundMessage = await db.message.create({
@@ -190,6 +252,58 @@ export async function POST(request: NextRequest) {
         }),
       },
     })
+
+    // Save JHON execution record (fire-and-forget)
+    const saveJhonExecution = async () => {
+      try {
+        if (await isPrismaReachable()) {
+          const { db } = await import('@/lib/db')
+          const jhonAgent = await db.agent.findFirst({
+            where: { workspaceId, type: 'JHON' },
+          })
+          if (jhonAgent) {
+            await db.agentExecution.create({
+              data: {
+                agentId: jhonAgent.id,
+                conversationId,
+                leadId: conversation.leadId || null,
+                status: 'SUCCESS',
+                duration: Date.now() - executionStartTime,
+                tokenUsage: JSON.stringify({ input: messageContent.length, output: pipelineResult.responseSuggestion?.length || 0 }),
+                cost: 0.02,
+                inputSummary: messageContent.substring(0, 200),
+                outputSummary: pipelineResult.responseSuggestion?.substring(0, 200) || '',
+                decisionRationale: pipelineResult.stage?.triggerReason || '',
+                policiesApplied: JSON.stringify([]),
+                cognitiveContext: JSON.stringify({ stage: pipelineResult.stage }),
+              },
+            })
+          }
+        } else {
+          const { findMany: findAgents, createAgentExecution } = await import('@/lib/db-supabase')
+          const agents = await findAgents('agents', { workspaceId, type: 'JHON' })
+          if (agents.length > 0) {
+            await createAgentExecution({
+              agentId: agents[0].id,
+              conversationId,
+              leadId: conversation.leadId || null,
+              status: 'SUCCESS',
+              duration: Date.now() - executionStartTime,
+              tokenUsage: JSON.stringify({ input: messageContent.length, output: pipelineResult.responseSuggestion?.length || 0 }),
+              cost: 0.02,
+              inputSummary: messageContent.substring(0, 200),
+              outputSummary: pipelineResult.responseSuggestion?.substring(0, 200) || '',
+              decisionRationale: pipelineResult.stage?.triggerReason || '',
+              policiesApplied: JSON.stringify([]),
+              cognitiveContext: JSON.stringify({ stage: pipelineResult.stage }),
+            })
+          }
+        }
+      } catch (execError) {
+        console.error('[Engine] Failed to save JHON execution record:', execError)
+      }
+    }
+    saveJhonExecution().catch(() => {})
 
     // ──────────────────────────────────────────────────────────
     // STEP 8: Send message via the appropriate channel

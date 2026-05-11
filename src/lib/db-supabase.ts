@@ -1361,3 +1361,124 @@ export async function findApprovedWhatsAppTemplate(workspaceId: string, template
   }
   return data
 }
+
+// ─── Agent Execution operations ─────────────────────────────
+
+/**
+ * Find recent executions for a specific agent
+ */
+export async function findAgentExecutions(agentId: string, limit: number = 10): Promise<any[]> {
+  const { data, error } = await getAdminClient()
+    .from('agent_executions')
+    .select('id, agentId, conversationId, leadId, status, duration, tokenUsage, cost, inputSummary, outputSummary, decisionRationale, policiesApplied, cognitiveContext, createdAt, updatedAt')
+    .eq('agentId', agentId)
+    .order('createdAt', { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    console.error('[db-supabase] findAgentExecutions error:', error.message)
+    return []
+  }
+  return data || []
+}
+
+/**
+ * Find executions for all agents in a workspace
+ */
+export async function findWorkspaceAgentExecutions(workspaceId: string, limit: number = 50): Promise<any[]> {
+  // First get all agent IDs for this workspace
+  const { data: agents, error: agentsError } = await getAdminClient()
+    .from('agents')
+    .select('id')
+    .eq('workspaceId', workspaceId)
+
+  if (agentsError || !agents || agents.length === 0) {
+    return []
+  }
+
+  const agentIds = agents.map((a: any) => a.id)
+
+  const { data, error } = await getAdminClient()
+    .from('agent_executions')
+    .select('id, agentId, conversationId, leadId, status, duration, tokenUsage, cost, inputSummary, outputSummary, decisionRationale, policiesApplied, cognitiveContext, createdAt, updatedAt')
+    .in('agentId', agentIds)
+    .order('createdAt', { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    console.error('[db-supabase] findWorkspaceAgentExecutions error:', error.message)
+    return []
+  }
+  return data || []
+}
+
+/**
+ * Create an agent execution record
+ */
+export async function createAgentExecution(data: Record<string, any>): Promise<any | null> {
+  const { data: result, error } = await getAdminClient()
+    .from('agent_executions')
+    .insert(data)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('[db-supabase] createAgentExecution error:', error.message)
+    return null
+  }
+  return result
+}
+
+/**
+ * Find agents with their execution count and recent executions for a workspace
+ */
+export async function findAgentsWithExecutions(workspaceId: string): Promise<any[]> {
+  // Get all agents for this workspace
+  const agents = await findMany('agents', { workspaceId }, { orderBy: 'name', orderAsc: true })
+  
+  if (agents.length === 0) return []
+
+  // Get execution counts per agent
+  const agentIds = agents.map((a: any) => a.id)
+  
+  const { data: executions, error } = await getAdminClient()
+    .from('agent_executions')
+    .select('id, agentId, status, createdAt')
+    .in('agentId', agentIds)
+    .order('createdAt', { ascending: false })
+
+  if (error) {
+    console.error('[db-supabase] findAgentsWithExecutions error:', error.message)
+    // Return agents without execution data
+    return agents.map((a: any) => ({
+      ...a,
+      executionCount: 0,
+      avgScore: 0,
+      recentExecutions: [],
+    }))
+  }
+
+  // Group executions by agent
+  const executionsByAgent = new Map<string, any[]>()
+  for (const exec of (executions || [])) {
+    const list = executionsByAgent.get(exec.agentId) || []
+    list.push(exec)
+    executionsByAgent.set(exec.agentId, list)
+  }
+
+  return agents.map((a: any) => {
+    const agentExecs = executionsByAgent.get(a.id) || []
+    const executionCount = agentExecs.length
+    const successCount = agentExecs.filter((e: any) => e.status === 'SUCCESS').length
+    const avgScore = executionCount > 0 ? (successCount / executionCount) * 100 : 0
+    const recentExecutions = agentExecs.slice(0, 4)
+
+    return {
+      ...a,
+      carnal: a.type, // Map type -> carnal for frontend compatibility
+      executionCount,
+      avgScore,
+      recentExecutions,
+    }
+  })
+}
