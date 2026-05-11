@@ -25,7 +25,6 @@ const publicRoutes = [
   "/api/telegram/webhook",
   "/api/seed",
   "/api/health",
-  "/api/debug",
 ]
 
 // Routes that should redirect away if already authenticated

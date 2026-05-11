@@ -10,7 +10,6 @@ import {
   findWorkspaceMember,
   createWorkspaceMember,
   isDatabaseReachable,
-  rawFetchTest,
   type SupabaseUser,
   type SupabaseWorkspace,
 } from "@/lib/db-supabase"
@@ -78,10 +77,6 @@ export async function POST(request: NextRequest) {
     debugInfo._debug = {
       hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
       hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      serviceKeyLen: process.env.SUPABASE_SERVICE_ROLE_KEY?.length || 0,
-      serviceKeyFirst10: process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 10) || '',
-      serviceKeyLast10: process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(-10) || '',
-      rawFetch: await rawFetchTest(),
     }
     return NextResponse.json(debugInfo, { status: 500 })
   }
