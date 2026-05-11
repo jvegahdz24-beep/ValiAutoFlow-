@@ -3,6 +3,12 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import { db } from "@/lib/db"
 import { getUserFirstWorkspace, createDefaultWorkspace } from "@/lib/auth"
+import {
+  findUserByEmail as supabaseFindUserByEmail,
+  findWorkspaceMember as supabaseFindWorkspaceMember,
+  findFirstWorkspaceForUser as supabaseFindFirstWorkspace,
+  updateUser as supabaseUpdateUser,
+} from "@/lib/db-supabase"
 import bcrypt from "bcryptjs"
 
 /**
@@ -23,6 +29,116 @@ export async function comparePassword(plaintext: string, stored: string): Promis
     return false
   }
   return bcrypt.compare(plaintext, stored)
+}
+
+/**
+ * Check if Prisma can connect to the database.
+ * Caches the result for 60 seconds to avoid repeated connection attempts.
+ */
+let prismaReachable: boolean | null = null
+let prismaCheckTime = 0
+const PRISMA_CHECK_INTERVAL = 60_000 // 60 seconds
+
+async function isPrismaReachable(): Promise<boolean> {
+  const now = Date.now()
+  if (prismaReachable !== null && (now - prismaCheckTime) < PRISMA_CHECK_INTERVAL) {
+    return prismaReachable
+  }
+  try {
+    await db.$queryRaw`SELECT 1`
+    prismaReachable = true
+    prismaCheckTime = now
+    return true
+  } catch {
+    prismaReachable = false
+    prismaCheckTime = now
+    return false
+  }
+}
+
+/**
+ * Find user by email — tries Prisma first, falls back to Supabase REST API.
+ */
+async function findUserByEmailSafe(email: string) {
+  if (await isPrismaReachable()) {
+    return await db.user.findUnique({ where: { email } })
+  }
+  // Fallback: Supabase REST API
+  const supaUser = await supabaseFindUserByEmail(email)
+  if (!supaUser) return null
+  return {
+    id: supaUser.id,
+    email: supaUser.email,
+    name: supaUser.name,
+    image: supaUser.image,
+    password: supaUser.password,
+    role: supaUser.role,
+    avatarUrl: supaUser.avatarUrl,
+    workspaceId: supaUser.workspaceId,
+    isActive: supaUser.isActive,
+    lastSeenAt: supaUser.lastSeenAt ? new Date(supaUser.lastSeenAt) : null,
+    emailVerified: supaUser.emailVerified ? new Date(supaUser.emailVerified) : null,
+    createdAt: new Date(supaUser.createdAt),
+    updatedAt: new Date(supaUser.updatedAt),
+  }
+}
+
+/**
+ * Find workspace member — tries Prisma first, falls back to Supabase REST API.
+ */
+async function findWorkspaceMemberSafe(userId: string, workspaceId: string) {
+  if (await isPrismaReachable()) {
+    return await db.workspaceMember.findUnique({
+      where: { userId_workspaceId: { userId, workspaceId } },
+    })
+  }
+  const supaMember = await supabaseFindWorkspaceMember(userId, workspaceId)
+  if (!supaMember) return null
+  return {
+    id: supaMember.id,
+    userId: supaMember.userId,
+    workspaceId: supaMember.workspaceId,
+    role: supaMember.role,
+    invitedAt: new Date(supaMember.invitedAt),
+    acceptedAt: supaMember.acceptedAt ? new Date(supaMember.acceptedAt) : null,
+    isActive: supaMember.isActive,
+  }
+}
+
+/**
+ * Get user's first workspace — tries Prisma first, falls back to Supabase REST API.
+ */
+async function getUserFirstWorkspaceSafe(userId: string) {
+  if (await isPrismaReachable()) {
+    return await getUserFirstWorkspace(userId)
+  }
+  const supaMember = await supabaseFindFirstWorkspace(userId)
+  if (!supaMember || !supaMember.workspace) return null
+  return {
+    id: supaMember.workspace.id,
+    name: supaMember.workspace.name,
+    slug: supaMember.workspace.slug,
+    plan: supaMember.workspace.plan,
+    role: supaMember.role,
+  }
+}
+
+/**
+ * Update user lastSeenAt — tries Prisma first, falls back to Supabase REST API.
+ */
+async function updateLastSeenAtSafe(userId: string) {
+  try {
+    if (await isPrismaReachable()) {
+      await db.user.update({
+        where: { id: userId },
+        data: { lastSeenAt: new Date() },
+      })
+    } else {
+      await supabaseUpdateUser(userId, { lastSeenAt: new Date().toISOString() } as any)
+    }
+  } catch {
+    // Non-critical — ignore errors
+  }
 }
 
 /**
@@ -154,9 +270,8 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email and password are required")
         }
 
-        const user = await db.user.findUnique({
-          where: { email: credentials.email },
-        })
+        // Uses Prisma with Supabase REST API fallback
+        const user = await findUserByEmailSafe(credentials.email)
 
         if (!user) {
           throw new Error("No user found with this email")
@@ -205,7 +320,7 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account }) {
       // For OAuth providers, create default workspace if user is new
       if (account?.type === "oauth" && user.id) {
-        const existingWorkspaces = await getUserFirstWorkspace(user.id)
+        const existingWorkspaces = await getUserFirstWorkspaceSafe(user.id)
         if (!existingWorkspaces) {
           await createDefaultWorkspace(user.id, user.name ?? "My Workspace")
         }
@@ -216,26 +331,19 @@ export const authOptions: NextAuthOptions = {
       // Initial sign in — add user data to token
       if (user) {
         token.id = user.id
-        token.workspaceId = user.workspaceId
-        token.role = user.role
+        token.workspaceId = (user as any).workspaceId
+        token.role = (user as any).role
 
         // Fetch user's first workspace if none set
-        if (!user.workspaceId) {
-          const workspace = await getUserFirstWorkspace(user.id)
+        if (!(user as any).workspaceId) {
+          const workspace = await getUserFirstWorkspaceSafe(user.id)
           if (workspace) {
             token.workspaceId = workspace.id
             token.role = workspace.role
           }
         } else {
           // Get the user's role in their current workspace
-          const membership = await db.workspaceMember.findUnique({
-            where: {
-              userId_workspaceId: {
-                userId: user.id,
-                workspaceId: user.workspaceId,
-              },
-            },
-          })
+          const membership = await findWorkspaceMemberSafe(user.id, (user as any).workspaceId)
           if (membership) {
             token.role = membership.role
           }
@@ -246,14 +354,7 @@ export const authOptions: NextAuthOptions = {
       if (trigger === "update" && session?.workspaceId) {
         token.workspaceId = session.workspaceId
         // Fetch role for new workspace
-        const membership = await db.workspaceMember.findUnique({
-          where: {
-            userId_workspaceId: {
-              userId: token.sub!,
-              workspaceId: session.workspaceId,
-            },
-          },
-        })
+        const membership = await findWorkspaceMemberSafe(token.sub!, session.workspaceId)
         if (membership) {
           token.role = membership.role
         }
@@ -274,10 +375,7 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user }) {
       // Update lastSeenAt on sign in
       if (user.id) {
-        await db.user.update({
-          where: { id: user.id },
-          data: { lastSeenAt: new Date() },
-        }).catch(() => {})
+        await updateLastSeenAtSafe(user.id)
       }
     },
   },
