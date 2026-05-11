@@ -22,6 +22,16 @@ function getInstanceName(workspaceId: string): string {
   return `ws_${workspaceId.substring(0, 8)}`
 }
 
+// GET — returns endpoint info (avoids 405 if browser hits this URL)
+export async function GET() {
+  return NextResponse.json({
+    endpoint: '/api/whatsapp/disconnect',
+    method: 'POST',
+    body: '{ workspaceId: string, clearSession?: boolean }',
+    message: 'Envía un POST para desconectar WhatsApp',
+  })
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()

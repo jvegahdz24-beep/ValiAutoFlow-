@@ -17,6 +17,23 @@ import {
 } from '@/lib/whatsapp/evolution-api'
 import { isPrismaReachable, findWhatsAppConfig, upsertWhatsAppConfig } from '@/lib/db-supabase'
 
+// Reject unsupported methods with a helpful error
+function methodNotAllowed(allowed: string[]) {
+  return NextResponse.json(
+    { error: `Método no permitido. Usa: ${allowed.join(', ')}` },
+    { status: 405 }
+  )
+}
+
+export async function GET() {
+  return NextResponse.json({
+    endpoint: '/api/whatsapp/evolution',
+    methods: ['POST'],
+    actions: ['create', 'connect', 'status', 'logout', 'delete'],
+    message: 'Envía un POST con { action, instanceName, workspaceId }',
+  })
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -192,3 +209,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Internal server error: ${error.message}` }, { status: 500 })
   }
 }
+
+export async function PUT() { return methodNotAllowed(['POST']) }
+export async function DELETE() { return methodNotAllowed(['POST']) }
+export async function PATCH() { return methodNotAllowed(['POST']) }
