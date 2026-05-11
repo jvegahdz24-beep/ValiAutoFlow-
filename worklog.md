@@ -93,3 +93,29 @@ Stage Summary:
   - fix: WhatsAppView safe JSON fetch
   - fix: REST API fallback for P0/P1 write endpoints
 - Vercel should auto-deploy; user should test QR generation after deploy completes
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Hybrid WhatsApp architecture — Evolution API (Railway) + direct Baileys fallback
+
+Work Log:
+- Enhanced server-v2.js with webhook forwarding, Supabase auth persistence, auto-reconnect
+- Modified QR endpoint (route.ts) to route to Evolution API when EVOLUTION_API_URL configured
+- Modified status endpoint to check Evolution API first, then fall back to Baileys
+- Modified disconnect endpoint to logout via Evolution API when configured
+- Added handleEvolutionMessage() to webhook route for incoming Baileys messages
+- Evolution messages create contact, conversation, route to engine/process pipeline
+- Frontend unchanged — same JSON API shape regardless of backend
+- Build verified: successful
+- Committed: c102fa4
+- Pushed ValiAutoFlow to GitHub: c102fa4
+- Created GitHub repo: jvegahdz24-beep/evolution-api-baileys
+- Pushed evolution-api server to GitHub: fe988db
+
+Stage Summary:
+- ValiAutoFlow is now hybrid: works with or without Evolution API
+- When EVOLUTION_API_URL is set → persistent Railway server (24/7)
+- When not set → in-process Baileys (serverless, connection drops on cold)
+- evolution-api-baileys repo ready for Railway/Render deploy
+- User needs to: 1) Deploy to Railway, 2) Set env vars in Vercel, 3) Test QR
