@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireWorkspaceAccess } from '@/lib/auth';
+import { isPrismaReachable, findById, count } from '@/lib/db-supabase';
 
 // GET /api/workspaces/[workspaceId] — Get workspace details
 export async function GET(
@@ -10,6 +11,34 @@ export async function GET(
   try {
     const { workspaceId } = await params;
     await requireWorkspaceAccess(workspaceId);
+
+    // Supabase REST API fallback when Prisma can't connect
+    if (!(await isPrismaReachable())) {
+      const workspace = await findById('workspaces', workspaceId);
+      if (!workspace) {
+        return NextResponse.json(
+          { error: 'Workspace not found' },
+          { status: 404 }
+        );
+      }
+      // Simplified: fetch counts in parallel for the _count object
+      const [contacts, leads, conversations, agents, pipelines, deals, followUpSequences, salesPolicies] = await Promise.all([
+        count('contacts', { workspaceId }),
+        count('leads', { workspaceId }),
+        count('conversations', { workspaceId }),
+        count('agents', { workspaceId }),
+        count('pipelines', { workspaceId }),
+        count('deals', { workspaceId }),
+        count('follow_up_sequences', { workspaceId }),
+        count('sales_policies', { workspaceId }),
+      ]);
+      return NextResponse.json({
+        workspace: {
+          ...workspace,
+          _count: { contacts, leads, conversations, agents, pipelines, deals, followUpSequences, salesPolicies },
+        },
+      });
+    }
 
     const workspace = await db.workspace.findUnique({
       where: { id: workspaceId },

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
+import { isPrismaReachable, findMany } from '@/lib/db-supabase'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -20,6 +21,12 @@ export async function GET(request: Request) {
   }
 
   try {
+    // Supabase REST API fallback when Prisma can't connect
+    if (!(await isPrismaReachable())) {
+      const agents = await findMany('agents', { workspaceId }, { orderBy: 'name', orderAsc: true })
+      return NextResponse.json(agents)
+    }
+
     const agents = await db.agent.findMany({
       where: { workspaceId },
       orderBy: { name: 'asc' },

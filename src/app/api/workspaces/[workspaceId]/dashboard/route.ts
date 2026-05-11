@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireWorkspaceAccess } from '@/lib/auth';
+import { isPrismaReachable, fetchDashboardData } from '@/lib/db-supabase';
 
 // GET /api/workspaces/[workspaceId]/dashboard — Unified Dashboard aggregation
 export async function GET(
@@ -10,6 +11,13 @@ export async function GET(
   try {
     const { workspaceId } = await params;
     await requireWorkspaceAccess(workspaceId);
+
+    // Try Supabase REST API fallback first if Prisma is unreachable
+    if (!(await isPrismaReachable())) {
+      console.log('[DASHBOARD] Prisma unreachable, using Supabase REST API fallback')
+      const dashboard = await fetchDashboardData(workspaceId)
+      return NextResponse.json({ dashboard })
+    }
 
     const workspace = await db.workspace.findUnique({
       where: { id: workspaceId },

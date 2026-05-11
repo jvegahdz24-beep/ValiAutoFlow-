@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
+import { isPrismaReachable, findMany } from '@/lib/db-supabase'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -24,6 +25,24 @@ export async function GET(request: Request) {
     const temperature = searchParams.get('temperature')
     const archetype = searchParams.get('archetype')
     const search = searchParams.get('search')
+
+    // Supabase REST API fallback when Prisma can't connect
+    if (!(await isPrismaReachable())) {
+      const filters: Record<string, any> = { workspaceId }
+      if (status) filters.status = status
+      if (temperature) filters.temperature = temperature
+      if (archetype) filters.archetype = archetype
+      // Note: text search (contains) is not supported via simple filters;
+      // Supabase fallback returns all matching leads without search filtering.
+      // The frontend can perform client-side search if needed.
+      const leads = await findMany('leads', filters, { orderBy: 'updatedAt', orderAsc: false })
+      // Return simplified data without nested includes (cognitiveStates, conversations)
+      return NextResponse.json(leads.map((lead: any) => ({
+        ...lead,
+        cognitiveStates: [],
+        conversations: [],
+      })))
+    }
 
     const where: Record<string, unknown> = { workspaceId }
 

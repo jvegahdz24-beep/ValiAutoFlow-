@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
+import { isPrismaReachable, findMany } from '@/lib/db-supabase'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -20,6 +21,19 @@ export async function GET(request: Request) {
   }
 
   try {
+    // Supabase REST API fallback when Prisma can't connect
+    if (!(await isPrismaReachable())) {
+      const conversations = await findMany('conversations', { workspaceId }, { orderBy: 'lastMessageAt', orderAsc: false })
+      // Return simplified data without nested includes (lead, messages, toolActions, behavioralTraces)
+      return NextResponse.json(conversations.map((conv: any) => ({
+        ...conv,
+        lead: null,
+        messages: [],
+        toolActions: [],
+        behavioralTraces: [],
+      })))
+    }
+
     const conversations = await db.conversation.findMany({
       where: { workspaceId },
       include: {

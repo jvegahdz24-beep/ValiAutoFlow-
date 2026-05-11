@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
+import { isPrismaReachable, findMany } from '@/lib/db-supabase'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -20,6 +21,23 @@ export async function GET(request: Request) {
   }
 
   try {
+    // Supabase REST API fallback when Prisma can't connect
+    if (!(await isPrismaReachable())) {
+      // Fetch pipelines and their stages in parallel
+      const [pipelines, stages] = await Promise.all([
+        findMany('pipelines', { workspaceId }),
+        findMany('pipeline_stages', { workspaceId }, { orderBy: 'order', orderAsc: true }),
+      ])
+      // Assemble simplified nested structure: each pipeline gets its stages with empty deals
+      const pipelinesWithStages = pipelines.map((pipeline: any) => ({
+        ...pipeline,
+        stages: stages
+          .filter((stage: any) => stage.pipelineId === pipeline.id)
+          .map((stage: any) => ({ ...stage, deals: [] })),
+      }))
+      return NextResponse.json(pipelinesWithStages)
+    }
+
     const pipelines = await db.pipeline.findMany({
       where: { workspaceId },
       include: {
