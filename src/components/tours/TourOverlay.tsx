@@ -61,20 +61,25 @@ interface TourProviderProps {
   isDemoUser?: boolean
 }
 
-function loadTourStateFromStorage(): TourState {
-  if (typeof window === 'undefined') {
-    return { completedTours: [], activeTourId: null, currentStepIndex: 0, dismissed: false }
-  }
-  try {
-    const stored = localStorage.getItem(TOUR_STORAGE_KEY)
-    if (stored) return JSON.parse(stored)
-  } catch {}
-  return { completedTours: [], activeTourId: null, currentStepIndex: 0, dismissed: false }
-}
+const DEFAULT_TOUR_STATE: TourState = { completedTours: [], activeTourId: null, currentStepIndex: 0, dismissed: false }
 
 export function TourProvider({ children, currentView, isDemoUser }: TourProviderProps) {
-  const [tourState, setTourState] = useState<TourState>(loadTourStateFromStorage)
-  const isClient = typeof window !== 'undefined'
+  // Always initialize with default state to avoid SSR/Client hydration mismatch.
+  // Load from localStorage in useEffect (client-only).
+  const [tourState, setTourState] = useState<TourState>(DEFAULT_TOUR_STATE)
+  const [isClient, setIsClient] = useState(false)
+
+  // Mark as client-mounted and load persisted state
+  useEffect(() => {
+    setIsClient(true)
+    try {
+      const stored = localStorage.getItem(TOUR_STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored) as TourState
+        setTourState(parsed)
+      }
+    } catch {}
+  }, [])
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
   const viewChangeCallback = useRef<((view: ViewType) => void) | null>(null)

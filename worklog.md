@@ -20,3 +20,34 @@ Stage Summary:
 - All critical API routes now have Supabase REST API fallback when Prisma can't connect
 - App URL: https://vali-auto-flow.vercel.app
 - Demo credentials: demo@valiautoflow.com / demo123
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix client-side dashboard errors (hydration, data format mismatch, error boundaries)
+
+Work Log:
+- Diagnosed critical data format mismatch: API returned `leadSources` with `{source, count}` but frontend expected `leadSourceDistribution` with `{name, value}`. Same for stage/temperature distributions.
+- Fixed dashboard API route (Prisma path) to add `leadSourceDistribution`, `stageDistribution`, `temperatureDistribution`, `statusDistribution` mapped to `{name, value/count}` format
+- Fixed Supabase REST API fallback (`fetchDashboardData`) to return same mapped field names
+- Fixed TourOverlay hydration mismatch: replaced `loadTourStateFromStorage()` useState initializer with default state + useEffect localStorage loading + `isClient` state flag
+- Fixed OverviewDashboard: added error state handling with user-friendly error UI
+- Fixed useDashboard hook: added response validation, error throwing on non-OK responses, retry config
+- Created `src/app/dashboard/error.tsx` — Next.js error boundary for the dashboard route
+- Fixed useWorkspace hook: replaced render-time `Promise.resolve().then()` setState pattern with proper useEffect-based initialization, avoiding hydration mismatch
+- Fixed dashboard/page.tsx: moved `isDemoUser` localStorage check from render to useEffect
+- Built successfully and deployed to Vercel production
+
+Stage Summary:
+- Root cause of client crash: data format mismatch between API and frontend (field names + object shapes)
+- Secondary cause: multiple hydration mismatches from localStorage access during SSR
+- All fixes deployed to https://vali-auto-flow.vercel.app
+- Files modified:
+  - src/app/api/workspaces/[workspaceId]/dashboard/route.ts
+  - src/lib/db-supabase.ts
+  - src/components/tours/TourOverlay.tsx
+  - src/components/dashboard/overview-dashboard.tsx
+  - src/hooks/use-dashboard.ts
+  - src/hooks/use-workspace.ts
+  - src/app/dashboard/page.tsx
+  - src/app/dashboard/error.tsx (new)

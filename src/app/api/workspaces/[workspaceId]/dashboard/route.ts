@@ -183,22 +183,28 @@ export async function GET(
         // Notifications
         unreadNotifications,
 
-        // Distributions
-        leadSources: contactsBySource.map((item) => ({
-          source: item.source,
-          count: item._count.source,
+        // Distributions — mapped to {name, value/count} for frontend compatibility
+        leadSourceDistribution: contactsBySource.map((item) => ({
+          name: item.source || 'Otro',
+          value: item._count.source,
         })),
         stageDistribution: conversationsByStage.map((item) => ({
-          stage: item.currentStage,
+          name: item.currentStage || 'UNKNOWN',
           count: item._count.currentStage,
         })),
         statusDistribution: leadsByStatus.map((item) => ({
-          status: item.status,
+          name: item.status || 'UNKNOWN',
           count: item._count.status,
         })),
         temperatureDistribution: leadsByTemperature.map((item) => ({
-          temperature: item.temperature,
+          name: item.temperature || 'UNKNOWN',
           count: item._count.temperature,
+        })),
+
+        // Keep legacy field names for backward compatibility
+        leadSources: contactsBySource.map((item) => ({
+          source: item.source,
+          count: item._count.source,
         })),
 
         // Recent data

@@ -650,10 +650,13 @@ export async function fetchDashboardData(workspaceId: string): Promise<Dashboard
     openRate: Math.round(openRate * 100) / 100,
     marketingConversionRate: Math.round(marketingConversionRate * 100) / 100,
     unreadNotifications,
+    // Map to frontend-expected format: {name, value} for PieChart, {name, count} for BarChart
+    leadSourceDistribution: leadSources.map(s => ({ name: s.source || 'Otro', value: s.count })),
+    stageDistribution: stageDistribution.map(s => ({ name: s.stage || 'UNKNOWN', count: s.count })),
+    statusDistribution: statusDistribution.map(s => ({ name: s.status || 'UNKNOWN', count: s.count })),
+    temperatureDistribution: temperatureDistribution.map(t => ({ name: t.temperature || 'UNKNOWN', count: t.count })),
+    // Keep legacy field names for backward compatibility
     leadSources,
-    stageDistribution,
-    statusDistribution,
-    temperatureDistribution,
     recentNotifications,
     recentCampaigns,
   }

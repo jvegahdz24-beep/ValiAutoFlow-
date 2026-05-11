@@ -118,7 +118,12 @@ function DashboardInner() {
 
 function DashboardContent() {
   const [activeView, _setActiveView] = useState<ViewType>('dashboard')
-  const isDemoUser = typeof window !== 'undefined' && localStorage.getItem('valiautoflow_demo_user') === 'true'
+  // Avoid hydration mismatch: read localStorage in useEffect, not during render
+  const [isDemoUser, setIsDemoUser] = useState(false)
+
+  useEffect(() => {
+    setIsDemoUser(localStorage.getItem('valiautoflow_demo_user') === 'true')
+  }, [])
 
   return (
     <TourProvider currentView={activeView} isDemoUser={isDemoUser}>

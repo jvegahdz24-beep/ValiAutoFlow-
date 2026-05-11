@@ -32,7 +32,7 @@ const TEMP_COLORS: Record<string, string> = {
 }
 
 export function OverviewDashboard({ workspaceId }: { workspaceId: string }) {
-  const { data: dashboardData, isLoading } = useDashboard(workspaceId)
+  const { data: dashboardData, isLoading, error } = useDashboard(workspaceId)
   const { data: conversations } = useConversations(workspaceId)
 
   if (isLoading || !dashboardData) {
@@ -41,6 +41,20 @@ export function OverviewDashboard({ workspaceId }: { workspaceId: string }) {
         <div className="flex items-center gap-2 text-muted-foreground">
           <Activity className="h-5 w-5 animate-pulse text-emerald-400" />
           <span>Cargando dashboard...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <AlertTriangle className="h-8 w-8 text-orange-400" />
+          <div>
+            <p className="text-sm font-medium text-foreground">Error al cargar datos</p>
+            <p className="text-xs text-muted-foreground mt-1">{error.message || 'Intenta recargar la página'}</p>
+          </div>
         </div>
       </div>
     )
