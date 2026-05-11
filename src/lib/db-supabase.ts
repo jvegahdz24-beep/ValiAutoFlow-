@@ -8,7 +8,28 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
+/**
+ * Get the service role key, supporting base64-encoded fallback.
+ * Some hosting platforms (Vercel) may mangle JWT characters in env vars,
+ * so we also accept SUPABASE_SERVICE_ROLE_KEY_B64 (base64-encoded).
+ */
+function getServiceRoleKey(): string {
+  const raw = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+  const b64 = process.env.SUPABASE_SERVICE_ROLE_KEY_B64 || ''
+
+  // If base64 version is provided, decode it (takes priority)
+  if (b64) {
+    try {
+      const decoded = Buffer.from(b64, 'base64').toString('utf-8')
+      if (decoded.startsWith('eyJ')) return decoded
+    } catch {}
+  }
+
+  return raw
+}
+
+const serviceRoleKey = getServiceRoleKey()
 
 let _adminClient: SupabaseClient | null = null
 
