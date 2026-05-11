@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateAuthUrl, getTokensFromCode } from '@/lib/google/auth';
 import { db } from '@/lib/db';
+import { isPrismaReachable, findGoogleCalendarConfig, updateGoogleCalendarConfig } from '@/lib/db-supabase';
 import { getServerSession } from '@/lib/auth';
 
 /**
@@ -26,9 +27,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Look up the GoogleCalendarConfig for this workspace
-    const config = await db.googleCalendarConfig.findUnique({
-      where: { workspaceId },
-    });
+    let config: any = null;
+    const prismaOK = await isPrismaReachable();
+    if (prismaOK) {
+      config = await db.googleCalendarConfig.findUnique({
+        where: { workspaceId },
+      });
+    } else {
+      // Fallback: Supabase REST
+      config = await findGoogleCalendarConfig(workspaceId);
+    }
 
     if (!config) {
       return NextResponse.json(
@@ -84,9 +92,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Look up the GoogleCalendarConfig for this workspace
-    const config = await db.googleCalendarConfig.findUnique({
-      where: { workspaceId },
-    });
+    let config: any = null;
+    const prismaOK2 = await isPrismaReachable();
+    if (prismaOK2) {
+      config = await db.googleCalendarConfig.findUnique({
+        where: { workspaceId },
+      });
+    } else {
+      // Fallback: Supabase REST
+      config = await findGoogleCalendarConfig(workspaceId);
+    }
 
     if (!config) {
       return NextResponse.json(
@@ -111,25 +126,37 @@ export async function POST(request: NextRequest) {
     const tokenExpiry = new Date(Date.now() + tokenResponse.expires_in * 1000);
 
     // Save the tokens to the database
-    const updated = await db.googleCalendarConfig.update({
-      where: { workspaceId },
-      data: {
+    let updated: any = null;
+    if (prismaOK2) {
+      updated = await db.googleCalendarConfig.update({
+        where: { workspaceId },
+        data: {
+          accessToken: tokenResponse.access_token,
+          refreshToken: tokenResponse.refresh_token || config.refreshToken,
+          tokenExpiry,
+          isActive: true,
+          lastSyncAt: new Date(),
+        },
+      });
+    } else {
+      // Fallback: Supabase REST
+      updated = await updateGoogleCalendarConfig(workspaceId, {
         accessToken: tokenResponse.access_token,
         refreshToken: tokenResponse.refresh_token || config.refreshToken,
-        tokenExpiry,
+        tokenExpiry: tokenExpiry.toISOString(),
         isActive: true,
-        lastSyncAt: new Date(),
-      },
-    });
+        lastSyncAt: new Date().toISOString(),
+      });
+    }
 
     return NextResponse.json({
       success: true,
       config: {
-        id: updated.id,
-        workspaceId: updated.workspaceId,
-        isActive: updated.isActive,
-        calendarId: updated.calendarId,
-        lastSyncAt: updated.lastSyncAt,
+        id: updated?.id,
+        workspaceId: updated?.workspaceId || workspaceId,
+        isActive: updated?.isActive ?? true,
+        calendarId: updated?.calendarId,
+        lastSyncAt: updated?.lastSyncAt,
       },
     });
   } catch (error) {

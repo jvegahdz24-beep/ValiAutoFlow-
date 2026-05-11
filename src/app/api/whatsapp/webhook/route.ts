@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { isPrismaReachable, upsertContact, findConversationByContact, createRecord, updateRecord, findMany, findById as findByIdSupabase, updateRecordBy } from '@/lib/db-supabase'
 import { verifyWebhook, parseIncomingMessage, parseStatusUpdate } from '@/lib/whatsapp/webhook'
 import { markMessageRead } from '@/lib/whatsapp/client'
 import { verifyMetaSignature, checkRateLimit, getClientIdentifier } from '@/lib/security'
@@ -30,9 +31,19 @@ export async function GET(request: NextRequest) {
     const challenge = searchParams.get('hub.challenge')
 
     // Look up WhatsAppConfig where verifyToken matches
-    const config = await db.whatsAppConfig.findFirst({
-      where: { verifyToken: token || '' },
-    })
+    let config: any = null
+    const prismaOK = await isPrismaReachable()
+    if (prismaOK) {
+      config = await db.whatsAppConfig.findFirst({
+        where: { verifyToken: token || '' },
+      })
+    } else {
+      // Fallback: search via Supabase REST API
+      const { data, error } = await (await import('@/lib/db-supabase')).findMany('whatsapp_configs', { verifyToken: token || '' }, { limit: 1 })
+      config = data || (Array.isArray(data) ? data[0] : null)
+      // findMany returns array, get first item
+      if (Array.isArray(data)) config = data[0] || null
+    }
 
     if (!config) {
       console.warn('[WhatsApp Webhook] GET — No config found for verify_token:', token)
@@ -134,16 +145,24 @@ export async function POST(request: NextRequest) {
       // Uses the indexed whatsappMessageId field for O(1) lookup
       // ──────────────────────────────────────────────────────────
       if (incomingMessage.messageId) {
-        const existingMessage = await db.message.findUnique({
+      let existingMessage: any = null
+      const prismaOK = await isPrismaReachable()
+      if (prismaOK) {
+        existingMessage = await db.message.findUnique({
           where: { whatsappMessageId: incomingMessage.messageId },
           select: { id: true },
         })
-
-        if (existingMessage) {
-          console.error(`[WhatsApp Webhook] Duplicate messageId: ${incomingMessage.messageId}. Skipping.`)
-          return NextResponse.json({ status: 'ok' }, { status: 200 })
-        }
+      } else {
+        // Fallback: check via Supabase
+        const { data: msgs } = await (await import('@/lib/db-supabase')).findMany('messages', { whatsappMessageId: incomingMessage.messageId }, { limit: 1 })
+        existingMessage = msgs?.[0] || null
       }
+
+      if (existingMessage) {
+        console.error(`[WhatsApp Webhook] Duplicate messageId: ${incomingMessage.messageId}. Skipping.`)
+        return NextResponse.json({ status: 'ok' }, { status: 200 })
+      }
+    }
 
       // ──────────────────────────────────────────────────────────
       // HANDLE INCOMING MESSAGE
@@ -185,12 +204,20 @@ async function handleIncomingMessage(
     const phoneNumberId = (metadata?.phone_number_id as string) || ''
 
     // Find the WhatsAppConfig by phoneNumberId
-    const waConfig = await db.whatsAppConfig.findFirst({
-      where: {
-        phoneNumberId,
-        isActive: true,
-      },
-    })
+    let waConfig: any = null
+    const prismaOK2 = await isPrismaReachable()
+    if (prismaOK2) {
+      waConfig = await db.whatsAppConfig.findFirst({
+        where: {
+          phoneNumberId,
+          isActive: true,
+        },
+      })
+    } else {
+      // Fallback: search via Supabase
+      const configs = await findMany('whatsapp_configs', { phoneNumberId, isActive: true }, { limit: 1 })
+      waConfig = configs?.[0] || null
+    }
 
     if (!waConfig) {
       console.warn(
@@ -219,51 +246,83 @@ async function handleIncomingMessage(
     const contactName = (parsed.raw?.contactName as string) || `WhatsApp ${parsed.from}`
     const contactPhone = parsed.from
 
-    const contact = await db.contact.upsert({
-      where: {
+    // Find or create Contact
+    let contact: any = null
+    const prismaOK3 = await isPrismaReachable()
+    if (prismaOK3) {
+      contact = await db.contact.upsert({
+        where: {
+          id: `${workspaceId}_wa_${contactPhone}`,
+        },
+        create: {
+          id: `${workspaceId}_wa_${contactPhone}`,
+          workspaceId,
+          phone: contactPhone,
+          name: contactName,
+          source: 'WHATSAPP',
+          metadata: JSON.stringify({
+            whatsappId: contactPhone,
+            firstMessageAt: new Date().toISOString(),
+          }),
+        },
+        update: {
+          name: contactName !== `WhatsApp ${parsed.from}` ? contactName : undefined,
+          phone: contactPhone,
+        },
+      })
+    } else {
+      // Fallback: use Supabase REST upsert
+      contact = await upsertContact(workspaceId, contactPhone, {
         id: `${workspaceId}_wa_${contactPhone}`,
-      },
-      create: {
-        id: `${workspaceId}_wa_${contactPhone}`,
-        workspaceId,
-        phone: contactPhone,
         name: contactName,
         source: 'WHATSAPP',
         metadata: JSON.stringify({
           whatsappId: contactPhone,
           firstMessageAt: new Date().toISOString(),
         }),
-      },
-      update: {
-        name: contactName !== `WhatsApp ${parsed.from}` ? contactName : undefined,
-        phone: contactPhone,
-      },
-    })
+      })
+    }
 
     // ──────────────────────────────────────────────────────────
     // STEP 5: Find or create Conversation
     // ──────────────────────────────────────────────────────────
     // Look for an active conversation for this contact on WhatsApp
-    let conversation = await db.conversation.findFirst({
-      where: {
-        workspaceId,
-        contactId: contact.id,
-        channel: 'WHATSAPP',
-        status: { in: ['ACTIVE', 'PENDING'] },
-      },
-      orderBy: { lastMessageAt: 'desc' },
-    })
+    let conversation: any = null
+    const prismaOK4 = await isPrismaReachable()
+    if (prismaOK4) {
+      conversation = await db.conversation.findFirst({
+        where: {
+          workspaceId,
+          contactId: contact.id,
+          channel: 'WHATSAPP',
+          status: { in: ['ACTIVE', 'PENDING'] },
+        },
+        orderBy: { lastMessageAt: 'desc' },
+      })
 
-    if (!conversation) {
-      conversation = await db.conversation.create({
-        data: {
+      if (!conversation) {
+        conversation = await db.conversation.create({
+          data: {
+            workspaceId,
+            contactId: contact.id,
+            channel: 'WHATSAPP',
+            status: 'ACTIVE',
+            currentStage: 'EXPLORATION',
+          },
+        })
+      }
+    } else {
+      // Fallback: find or create via Supabase
+      conversation = await findConversationByContact(workspaceId, contact.id)
+      if (!conversation) {
+        conversation = await createRecord('conversations', {
           workspaceId,
           contactId: contact.id,
           channel: 'WHATSAPP',
           status: 'ACTIVE',
           currentStage: 'EXPLORATION',
-        },
-      })
+        })
+      }
     }
 
     // ──────────────────────────────────────────────────────────
@@ -275,35 +334,58 @@ async function handleIncomingMessage(
         await markContactOptedOut(contact.id, optOutResult.keyword || 'unknown')
 
         // Create inbound message record but do NOT route to engine
-        await db.message.create({
-          data: {
+        const prismaOK5 = await isPrismaReachable()
+        if (prismaOK5) {
+          await db.message.create({
+            data: {
+              conversationId: conversation.id,
+              direction: 'INBOUND',
+              content: parsed.text,
+              senderType: 'LEAD',
+              status: 'DELIVERED',
+              whatsappMessageId: parsed.messageId,
+              metadata: JSON.stringify({
+                optOut: true,
+                optOutKeyword: optOutResult.keyword,
+              }),
+            },
+          })
+
+          // Send confirmation
+          await db.message.create({
+            data: {
+              conversationId: conversation.id,
+              direction: 'OUTBOUND',
+              content: 'Recibimos tu solicitud. No te enviaremos más mensajes por WhatsApp. Si cambias de opinión, envíanos un mensaje.',
+              senderType: 'AI',
+              senderId: 'SYSTEM',
+              status: 'SENT',
+              metadata: JSON.stringify({
+                type: 'opt_out_confirmation',
+              }),
+            },
+          })
+        } else {
+          // Fallback: Supabase REST
+          await createRecord('messages', {
             conversationId: conversation.id,
             direction: 'INBOUND',
             content: parsed.text,
             senderType: 'LEAD',
             status: 'DELIVERED',
             whatsappMessageId: parsed.messageId,
-            metadata: JSON.stringify({
-              optOut: true,
-              optOutKeyword: optOutResult.keyword,
-            }),
-          },
-        })
-
-        // Send confirmation
-        await db.message.create({
-          data: {
+            metadata: JSON.stringify({ optOut: true, optOutKeyword: optOutResult.keyword }),
+          })
+          await createRecord('messages', {
             conversationId: conversation.id,
             direction: 'OUTBOUND',
             content: 'Recibimos tu solicitud. No te enviaremos más mensajes por WhatsApp. Si cambias de opinión, envíanos un mensaje.',
             senderType: 'AI',
             senderId: 'SYSTEM',
             status: 'SENT',
-            metadata: JSON.stringify({
-              type: 'opt_out_confirmation',
-            }),
-          },
-        })
+            metadata: JSON.stringify({ type: 'opt_out_confirmation' }),
+          })
+        }
 
         console.error(`[WhatsApp Webhook] Contact ${contact.id} opted out via "${optOutResult.keyword}"`)
         return
@@ -313,8 +395,38 @@ async function handleIncomingMessage(
     // ──────────────────────────────────────────────────────────
     // STEP 6: Create the inbound message
     // ──────────────────────────────────────────────────────────
-    await db.message.create({
-      data: {
+    // Create the inbound message
+    const prismaOK6 = await isPrismaReachable()
+    if (prismaOK6) {
+      await db.message.create({
+        data: {
+          conversationId: conversation.id,
+          direction: 'INBOUND',
+          content: parsed.text,
+          senderType: 'LEAD',
+          status: 'DELIVERED',
+          whatsappMessageId: parsed.messageId,
+          metadata: JSON.stringify({
+            messageType: parsed.type,
+            from: parsed.from,
+            timestamp: parsed.timestamp,
+            mediaId: parsed.mediaId || undefined,
+            mimeType: parsed.mimeType || undefined,
+            fileName: parsed.fileName || undefined,
+            caption: parsed.caption || undefined,
+            location: parsed.location || undefined,
+          }),
+        },
+      })
+
+      // Update conversation's lastMessageAt
+      await db.conversation.update({
+        where: { id: conversation.id },
+        data: { lastMessageAt: new Date() },
+      })
+    } else {
+      // Fallback: Supabase REST
+      await createRecord('messages', {
         conversationId: conversation.id,
         direction: 'INBOUND',
         content: parsed.text,
@@ -325,22 +437,11 @@ async function handleIncomingMessage(
           messageType: parsed.type,
           from: parsed.from,
           timestamp: parsed.timestamp,
-          mediaId: parsed.mediaId || undefined,
-          mimeType: parsed.mimeType || undefined,
-          fileName: parsed.fileName || undefined,
-          caption: parsed.caption || undefined,
-          location: parsed.location || undefined,
         }),
-      },
-    })
-
-    // ──────────────────────────────────────────────────────────
-    // STEP 7: Update conversation's lastMessageAt
-    // ──────────────────────────────────────────────────────────
-    await db.conversation.update({
-      where: { id: conversation.id },
-      data: { lastMessageAt: new Date() },
-    })
+      })
+      // Update conversation's lastMessageAt
+      await updateRecord('conversations', conversation.id, { lastMessageAt: new Date().toISOString() })
+    }
 
     // ──────────────────────────────────────────────────────────
     // STEP 8: Route to engine/process pipeline
@@ -396,30 +497,52 @@ async function handleStatusUpdate(
     const internalStatus = statusMap[parsed.status] || parsed.status.toUpperCase()
 
     // Find the message by WhatsApp message ID
-    const message = await db.message.findUnique({
-      where: { whatsappMessageId: parsed.messageId },
-    })
+    let message: any = null
+    const prismaOK7 = await isPrismaReachable()
+    if (prismaOK7) {
+      message = await db.message.findUnique({
+        where: { whatsappMessageId: parsed.messageId },
+      })
+    } else {
+      // Fallback: Supabase REST
+      const msgs = await findMany('messages', { whatsappMessageId: parsed.messageId }, { limit: 1 })
+      message = msgs?.[0] || null
+    }
 
     if (message) {
       // Update message status
-      await db.message.update({
-        where: { id: message.id },
-        data: { status: internalStatus },
-      })
+      if (prismaOK7) {
+        await db.message.update({
+          where: { id: message.id },
+          data: { status: internalStatus },
+        })
 
-      // Create status history entry
-      await db.messageStatusHistory.create({
-        data: {
+        // Create status history entry
+        await db.messageStatusHistory.create({
+          data: {
+            messageId: message.id,
+            status: internalStatus,
+            metadata: JSON.stringify({
+              whatsappMessageId: parsed.messageId,
+              recipientId: parsed.recipientId,
+              timestamp: parsed.timestamp,
+              errors: parsed.errors || undefined,
+            }),
+          },
+        })
+      } else {
+        // Fallback: Supabase REST
+        await updateRecord('messages', message.id, { status: internalStatus })
+        await createRecord('message_status_histories', {
           messageId: message.id,
           status: internalStatus,
           metadata: JSON.stringify({
             whatsappMessageId: parsed.messageId,
             recipientId: parsed.recipientId,
             timestamp: parsed.timestamp,
-            errors: parsed.errors || undefined,
           }),
-        },
-      })
+        })
+      }
     } else {
       // Message not found in our DB — could be a status for a message
       // sent outside our system. Log it for debugging.

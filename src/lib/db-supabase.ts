@@ -1483,3 +1483,275 @@ export async function findAgentsWithExecutions(workspaceId: string): Promise<any
     }
   })
 }
+
+// ─── Contact operations (for WhatsApp webhook) ──────────────
+
+/**
+ * Upsert contact by phone + workspaceId. Creates if not exists.
+ */
+export async function upsertContact(workspaceId: string, phone: string, data: Record<string, any>): Promise<any | null> {
+  // Try to find existing contact
+  const { data: existing, error: findError } = await getAdminClient()
+    .from('contacts')
+    .select('id')
+    .eq('workspaceId', workspaceId)
+    .eq('phone', phone)
+    .maybeSingle()
+
+  if (existing) {
+    // Update existing
+    const { data: result, error } = await getAdminClient()
+      .from('contacts')
+      .update(data)
+      .eq('id', existing.id)
+      .select()
+      .single()
+    if (error) {
+      console.error('[db-supabase] upsertContact update error:', error.message)
+      return null
+    }
+    return result
+  }
+
+  // Create new
+  const { data: result, error } = await getAdminClient()
+    .from('contacts')
+    .insert({ workspaceId, phone, ...data })
+    .select()
+    .single()
+  if (error) {
+    console.error('[db-supabase] upsertContact create error:', error.message)
+    return null
+  }
+  return result
+}
+
+// ─── Conversation operations ────────────────────────────────
+
+/**
+ * Find conversation by contact ID and workspace ID
+ */
+export async function findConversationByContact(workspaceId: string, contactId: string): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('conversations')
+    .select('*')
+    .eq('workspaceId', workspaceId)
+    .eq('contactId', contactId)
+    .order('createdAt', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[db-supabase] findConversationByContact error:', error.message)
+    return null
+  }
+  return data
+}
+
+/**
+ * Update a record by a non-id field (e.g., workspaceId, conversationId)
+ */
+export async function updateRecordBy(table: string, field: string, value: string, data: Record<string, any>): Promise<any | null> {
+  const { data: result, error } = await getAdminClient()
+    .from(table)
+    .update(data)
+    .eq(field, value)
+    .select()
+    .single()
+
+  if (error) {
+    console.error(`[db-supabase] updateRecordBy(${table}, ${field}=${value}) error:`, error.message)
+    return null
+  }
+  return result
+}
+
+/**
+ * Delete many records by a filter field
+ */
+export async function deleteMany(table: string, field: string, value: string): Promise<boolean> {
+  const { error } = await getAdminClient()
+    .from(table)
+    .delete()
+    .eq(field, value)
+
+  if (error) {
+    console.error(`[db-supabase] deleteMany(${table}, ${field}=${value}) error:`, error.message)
+    return false
+  }
+  return true
+}
+
+// ─── Cognitive State operations ─────────────────────────────
+
+/**
+ * Upsert cognitive state for a lead
+ */
+export async function upsertCognitiveState(leadId: string, data: Record<string, any>): Promise<any | null> {
+  // Try to find existing
+  const { data: existing } = await getAdminClient()
+    .from('cognitive_states')
+    .select('id')
+    .eq('leadId', leadId)
+    .maybeSingle()
+
+  if (existing) {
+    const { data: result, error } = await getAdminClient()
+      .from('cognitive_states')
+      .update(data)
+      .eq('leadId', leadId)
+      .select()
+      .single()
+    if (error) {
+      console.error('[db-supabase] upsertCognitiveState update error:', error.message)
+      return null
+    }
+    return result
+  }
+
+  const { data: result, error } = await getAdminClient()
+    .from('cognitive_states')
+    .insert({ leadId, ...data })
+    .select()
+    .single()
+  if (error) {
+    console.error('[db-supabase] upsertCognitiveState create error:', error.message)
+    return null
+  }
+  return result
+}
+
+// ─── Lead operations ────────────────────────────────────────
+
+/**
+ * Find lead by ID
+ */
+export async function findLeadById(leadId: string): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('leads')
+    .select('*')
+    .eq('id', leadId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[db-supabase] findLeadById error:', error.message)
+    return null
+  }
+  return data
+}
+
+/**
+ * Find lead by contact ID
+ */
+export async function findLeadByContactId(contactId: string): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('leads')
+    .select('*')
+    .eq('contactId', contactId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[db-supabase] findLeadByContactId error:', error.message)
+    return null
+  }
+  return data
+}
+
+/**
+ * Find conversation by ID with related data
+ */
+export async function findConversationById(conversationId: string): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('conversations')
+    .select('*')
+    .eq('id', conversationId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[db-supabase] findConversationById error:', error.message)
+    return null
+  }
+  return data
+}
+
+/**
+ * Find agent by ID
+ */
+export async function findAgentById(agentId: string): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('agents')
+    .select('*')
+    .eq('id', agentId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[db-supabase] findAgentById error:', error.message)
+    return null
+  }
+  return data
+}
+
+/**
+ * Find Telegram bot config by bot token
+ */
+export async function findTelegramConfigByToken(botToken: string): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('telegram_bot_configs')
+    .select('*')
+    .eq('botToken', botToken)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[db-supabase] findTelegramConfigByToken error:', error.message)
+    return null
+  }
+  return data
+}
+
+/**
+ * Find or create a Telegram bot session
+ */
+export async function findTelegramSession(chatId: string, workspaceId: string): Promise<any | null> {
+  const { data, error } = await getAdminClient()
+    .from('telegram_bot_sessions')
+    .select('*')
+    .eq('chatId', chatId)
+    .eq('workspaceId', workspaceId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[db-supabase] findTelegramSession error:', error.message)
+    return null
+  }
+  return data
+}
+
+/**
+ * Upsert a Telegram bot session
+ */
+export async function upsertTelegramSession(chatId: string, workspaceId: string, data: Record<string, any>): Promise<any | null> {
+  const existing = await findTelegramSession(chatId, workspaceId)
+  if (existing) {
+    const { data: result, error } = await getAdminClient()
+      .from('telegram_bot_sessions')
+      .update(data)
+      .eq('id', existing.id)
+      .select()
+      .single()
+    if (error) {
+      console.error('[db-supabase] upsertTelegramSession update error:', error.message)
+      return null
+    }
+    return result
+  }
+  const { data: result, error } = await getAdminClient()
+    .from('telegram_bot_sessions')
+    .insert({ chatId, workspaceId, ...data })
+    .select()
+    .single()
+  if (error) {
+    console.error('[db-supabase] upsertTelegramSession create error:', error.message)
+    return null
+  }
+  return result
+}

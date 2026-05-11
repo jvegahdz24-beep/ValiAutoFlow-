@@ -12,7 +12,7 @@ import { Orchestrator } from '@/lib/engine/orchestrator'
 import { isConversationTakenOver, notifyHumanTakeoverNeeded, notifyHotLead } from '@/lib/telegram/cognitive-bridge'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/channel-bridge'
 import { type LeadArchetype, type LeadTemperature } from '@/lib/engine/types'
-import { isPrismaReachable } from '@/lib/db-supabase'
+import { isPrismaReachable, createRecord, updateRecord, upsertCognitiveState, findConversationById } from '@/lib/db-supabase'
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,20 +44,33 @@ export async function POST(request: NextRequest) {
     const takenOver = await isConversationTakenOver(workspaceId, conversationId)
     if (takenOver) {
       // Create inbound message but don't generate AI response
-      await db.message.create({
-        data: {
+      const prismaOK = await isPrismaReachable()
+      if (prismaOK) {
+        await db.message.create({
+          data: {
+            conversationId,
+            direction: 'INBOUND',
+            content: messageContent,
+            senderType: 'LEAD',
+            status: 'DELIVERED',
+          },
+        })
+
+        await db.conversation.update({
+          where: { id: conversationId },
+          data: { lastMessageAt: new Date() },
+        })
+      } else {
+        // Fallback: Supabase REST
+        await createRecord('messages', {
           conversationId,
           direction: 'INBOUND',
           content: messageContent,
           senderType: 'LEAD',
           status: 'DELIVERED',
-        },
-      })
-
-      await db.conversation.update({
-        where: { id: conversationId },
-        data: { lastMessageAt: new Date() },
-      })
+        })
+        await updateRecord('conversations', conversationId, { lastMessageAt: new Date().toISOString() })
+      }
 
       return NextResponse.json({
         status: 'human_controlled',
@@ -68,23 +81,53 @@ export async function POST(request: NextRequest) {
     // ──────────────────────────────────────────────────────────
     // STEP 2: Load conversation context
     // ──────────────────────────────────────────────────────────
-    const conversation = await db.conversation.findUnique({
-      where: { id: conversationId },
-      include: {
-        contact: true,
-        lead: {
-          include: {
-            cognitiveStates: { orderBy: { updatedAt: 'desc' }, take: 1 },
-            stateTransitions: { orderBy: { createdAt: 'desc' }, take: 10 },
-            dealValueHistories: { orderBy: { createdAt: 'desc' }, take: 5 },
+    let conversation: any = null
+    const prismaOK2 = await isPrismaReachable()
+    if (prismaOK2) {
+      conversation = await db.conversation.findUnique({
+        where: { id: conversationId },
+        include: {
+          contact: true,
+          lead: {
+            include: {
+              cognitiveStates: { orderBy: { updatedAt: 'desc' }, take: 1 },
+              stateTransitions: { orderBy: { createdAt: 'desc' }, take: 10 },
+              dealValueHistories: { orderBy: { createdAt: 'desc' }, take: 5 },
+            },
+          },
+          messages: {
+            orderBy: { createdAt: 'desc' },
+            take: 20,
           },
         },
-        messages: {
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-        },
-      },
-    })
+      })
+    } else {
+      // Fallback: Supabase REST — load conversation with related data
+      const conv = await findConversationById(conversationId)
+      if (conv) {
+        const [contact, lead, messages] = await Promise.all([
+          conv.contactId ? (await import('@/lib/db-supabase')).findById('contacts', conv.contactId) : null,
+          conv.leadId ? (await import('@/lib/db-supabase')).findLeadById(conv.leadId) : null,
+          (await import('@/lib/db-supabase')).findMany('messages', { conversationId }, { orderBy: 'createdAt', orderAsc: false, limit: 20 }),
+        ])
+        let cognitiveStates: any[] = []
+        let stateTransitions: any[] = []
+        let dealValueHistories: any[] = []
+        if (conv.leadId) {
+          [cognitiveStates, stateTransitions, dealValueHistories] = await Promise.all([
+            (await import('@/lib/db-supabase')).findMany('cognitive_states', { leadId: conv.leadId }, { orderBy: 'updatedAt', orderAsc: false, limit: 1 }),
+            (await import('@/lib/db-supabase')).findMany('state_transitions', { leadId: conv.leadId }, { orderBy: 'createdAt', orderAsc: false, limit: 10 }),
+            (await import('@/lib/db-supabase')).findMany('deal_value_histories', { leadId: conv.leadId }, { orderBy: 'createdAt', orderAsc: false, limit: 5 }),
+          ])
+        }
+        conversation = {
+          ...conv,
+          contact: contact || { name: 'Unknown' },
+          lead: lead ? { ...lead, cognitiveStates, stateTransitions, dealValueHistories } : null,
+          messages,
+        }
+      }
+    }
 
     if (!conversation) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
@@ -93,15 +136,27 @@ export async function POST(request: NextRequest) {
     // ──────────────────────────────────────────────────────────
     // STEP 3: Create inbound message
     // ──────────────────────────────────────────────────────────
-    await db.message.create({
-      data: {
+    const prismaOK3 = await isPrismaReachable()
+    if (prismaOK3) {
+      await db.message.create({
+        data: {
+          conversationId,
+          direction: 'INBOUND',
+          content: messageContent,
+          senderType: 'LEAD',
+          status: 'DELIVERED',
+        },
+      })
+    } else {
+      // Fallback: Supabase REST
+      await createRecord('messages', {
         conversationId,
         direction: 'INBOUND',
         content: messageContent,
         senderType: 'LEAD',
         status: 'DELIVERED',
-      },
-    })
+      })
+    }
 
     // ──────────────────────────────────────────────────────────
     // STEP 4: Load active policies
@@ -236,8 +291,28 @@ export async function POST(request: NextRequest) {
     // ──────────────────────────────────────────────────────────
     // STEP 7: Create outbound message from JHON
     // ──────────────────────────────────────────────────────────
-    const outboundMessage = await db.message.create({
-      data: {
+    let outboundMessage: any = null
+    const prismaOK4 = await isPrismaReachable()
+    if (prismaOK4) {
+      outboundMessage = await db.message.create({
+        data: {
+          conversationId,
+          direction: 'OUTBOUND',
+          content: pipelineResult.responseSuggestion,
+          senderType: 'AI',
+          senderId: 'JHON',
+          status: 'SENT',
+          metadata: JSON.stringify({
+            stage: pipelineResult.stage,
+            cognitiveState: pipelineResult.cognitiveState,
+            evaluation: pipelineResult.evaluation,
+            validation: pipelineResult.validation,
+          }),
+        },
+      })
+    } else {
+      // Fallback: Supabase REST
+      outboundMessage = await createRecord('messages', {
         conversationId,
         direction: 'OUTBOUND',
         content: pipelineResult.responseSuggestion,
@@ -250,8 +325,8 @@ export async function POST(request: NextRequest) {
           evaluation: pipelineResult.evaluation,
           validation: pipelineResult.validation,
         }),
-      },
-    })
+      })
+    }
 
     // Save JHON execution record (fire-and-forget)
     const saveJhonExecution = async () => {
@@ -316,52 +391,86 @@ export async function POST(request: NextRequest) {
     // ──────────────────────────────────────────────────────────
     // STEP 9: Update conversation
     // ──────────────────────────────────────────────────────────
-    await db.conversation.update({
-      where: { id: conversationId },
-      data: {
+    const prismaOK5 = await isPrismaReachable()
+    if (prismaOK5) {
+      await db.conversation.update({
+        where: { id: conversationId },
+        data: {
+          currentStage: pipelineResult.stage.stage,
+          lastMessageAt: new Date(),
+        },
+      })
+    } else {
+      // Fallback: Supabase REST
+      await updateRecord('conversations', conversationId, {
         currentStage: pipelineResult.stage.stage,
-        lastMessageAt: new Date(),
-      },
-    })
+        lastMessageAt: new Date().toISOString(),
+      })
+    }
 
     // ──────────────────────────────────────────────────────────
     // STEP 9: Update cognitive state
     // ──────────────────────────────────────────────────────────
     if (conversation.leadId) {
-      await db.cognitiveState.upsert({
-        where: {
+      const prismaOK6 = await isPrismaReachable()
+      if (prismaOK6) {
+        await db.cognitiveState.upsert({
+          where: {
+            id: `${conversation.leadId}_${conversationId}`,
+          },
+          create: {
+            id: `${conversation.leadId}_${conversationId}`,
+            leadId: conversation.leadId,
+            conversationId,
+            temperature: pipelineResult.cognitiveState.temperature,
+            archetype: pipelineResult.cognitiveState.archetype,
+            intentScore: pipelineResult.cognitiveState.intentScore,
+            churnRisk: pipelineResult.cognitiveState.churnRisk,
+            priority: pipelineResult.cognitiveState.priority,
+          },
+          update: {
+            temperature: pipelineResult.cognitiveState.temperature,
+            archetype: pipelineResult.cognitiveState.archetype,
+            intentScore: pipelineResult.cognitiveState.intentScore,
+            churnRisk: pipelineResult.cognitiveState.churnRisk,
+            priority: pipelineResult.cognitiveState.priority,
+          },
+        })
+      } else {
+        // Fallback: Supabase REST
+        await upsertCognitiveState(conversation.leadId, {
           id: `${conversation.leadId}_${conversationId}`,
-        },
-        create: {
-          id: `${conversation.leadId}_${conversationId}`,
-          leadId: conversation.leadId,
           conversationId,
           temperature: pipelineResult.cognitiveState.temperature,
           archetype: pipelineResult.cognitiveState.archetype,
           intentScore: pipelineResult.cognitiveState.intentScore,
           churnRisk: pipelineResult.cognitiveState.churnRisk,
           priority: pipelineResult.cognitiveState.priority,
-        },
-        update: {
-          temperature: pipelineResult.cognitiveState.temperature,
-          archetype: pipelineResult.cognitiveState.archetype,
-          intentScore: pipelineResult.cognitiveState.intentScore,
-          churnRisk: pipelineResult.cognitiveState.churnRisk,
-          priority: pipelineResult.cognitiveState.priority,
-        },
-      })
+        })
+      }
 
       // Track stage transition
       if (pipelineResult.stage.stage !== conversation.currentStage) {
-        await db.stateTransition.create({
-          data: {
+        if (prismaOK6) {
+          await db.stateTransition.create({
+            data: {
+              leadId: conversation.leadId,
+              fromStage: conversation.currentStage,
+              toStage: pipelineResult.stage.stage,
+              trigger: pipelineResult.stage.triggerReason,
+              context: JSON.stringify({ messageContent: messageContent.substring(0, 200) }),
+            },
+          })
+        } else {
+          // Fallback: Supabase REST
+          await createRecord('state_transitions', {
             leadId: conversation.leadId,
             fromStage: conversation.currentStage,
             toStage: pipelineResult.stage.stage,
             trigger: pipelineResult.stage.triggerReason,
             context: JSON.stringify({ messageContent: messageContent.substring(0, 200) }),
-          },
-        })
+          })
+        }
       }
     }
 
