@@ -67,3 +67,29 @@ Stage Summary:
 - 7 P1 routes fixed
 - All core UI interactions now resilient to Prisma connection failures
 - 7 files changed, 229 insertions, 73 deletions
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Fix WhatsApp QR 405 error — deploy all pending commits to GitHub/Vercel
+
+Work Log:
+- Reviewed /api/whatsapp/qr/route.ts: already has both GET and POST methods
+- Reviewed WhatsAppView.tsx: already uses safeFetch with method: 'POST'
+- Reviewed next.config.ts: serverExternalPackages already includes baileys, boom, pino, qrcode, ws, sharp
+- Reviewed baileys.ts: complete with Supabase auth state persistence, QR generation, connection handling
+- Found 37 local commits ahead of origin/main (never pushed)
+- Pushed all 37 commits to GitHub using PAT
+- Push successful: 69ce665..b147752 main -> main
+- Vercel auto-deploy should trigger from the push
+
+Stage Summary:
+- All WhatsApp Baileys changes are now deployed to GitHub
+- Key commits pushed:
+  - feat: integrate Baileys WhatsApp client directly
+  - fix: add Baileys API routes to middleware publicRoutes
+  - fix: Baileys auth state fallback to existing DB columns
+  - fix: Baileys serverless compatibility (serverExternalPackages, maxDuration)
+  - fix: WhatsAppView safe JSON fetch
+  - fix: REST API fallback for P0/P1 write endpoints
+- Vercel should auto-deploy; user should test QR generation after deploy completes
