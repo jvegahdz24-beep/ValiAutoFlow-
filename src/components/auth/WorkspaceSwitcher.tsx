@@ -86,7 +86,7 @@ export function WorkspaceSwitcher({ userId, currentWorkspaceId }: WorkspaceSwitc
           workspaceId: data.workspace.id,
           role: data.workspace.role,
         })
-        toast.success(`Switched to ${data.workspace.name}`)
+        toast.success(`Switched to ${data.workspace?.name || 'workspace'}`)
         router.refresh()
       } else {
         const data = await res.json()
@@ -116,9 +116,9 @@ export function WorkspaceSwitcher({ userId, currentWorkspaceId }: WorkspaceSwitc
           ...prev,
           {
             id: data.workspace.id,
-            name: data.workspace.name,
-            slug: data.workspace.slug,
-            plan: data.workspace.plan,
+            name: data.workspace?.name || '',
+            slug: data.workspace?.slug || '',
+            plan: data.workspace?.plan || '',
             role: 'OWNER',
             createdAt: data.workspace.createdAt,
           },
@@ -127,7 +127,7 @@ export function WorkspaceSwitcher({ userId, currentWorkspaceId }: WorkspaceSwitc
         await handleSwitchWorkspace(data.workspace.id)
         setShowCreateInput(false)
         setNewWorkspaceName('')
-        toast.success(`Created workspace "${data.workspace.name}"`)
+        toast.success(`Created workspace "${data.workspace?.name || 'workspace'}"`)
       } else {
         const data = await res.json()
         toast.error(data.error || 'Failed to create workspace')

@@ -233,7 +233,7 @@ export function OverviewDashboard({ workspaceId }: { workspaceId: string }) {
             <CardContent className="p-0">
               <ScrollArea className="h-[320px]">
                 <div className="space-y-1 px-6 pb-4">
-                  {conversations?.slice(0, 8).map((conv: { id: string; channel: string; lead: { name: string }; stage: string; temperature: string; lastMessage: string | null; lastMessageAt: string | null }) => (
+                  {(conversations || []).slice(0, 8).map((conv: { id: string; channel: string; lead: { name: string } | null; stage: string; temperature: string; lastMessage: string | null; lastMessageAt: string | null }) => (
                     <div
                       key={conv.id}
                       className="flex items-start gap-3 rounded-lg p-3 hover:bg-muted/50 transition-colors cursor-pointer"
@@ -243,7 +243,7 @@ export function OverviewDashboard({ workspaceId }: { workspaceId: string }) {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-medium truncate">{conv.lead.name}</span>
+                          <span className="text-sm font-medium truncate">{conv?.lead?.name || 'Lead sin nombre'}</span>
                           <StageBadge stage={conv.stage} />
                           <TemperatureBadge temperature={conv.temperature} />
                         </div>
@@ -258,6 +258,11 @@ export function OverviewDashboard({ workspaceId }: { workspaceId: string }) {
                       </div>
                     </div>
                   ))}
+                  {(!conversations || conversations.length === 0) && (
+                    <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                      No hay conversaciones recientes
+                    </div>
+                  )}
                 </div>
               </ScrollArea>
             </CardContent>

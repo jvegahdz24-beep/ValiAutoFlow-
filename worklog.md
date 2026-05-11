@@ -51,3 +51,22 @@ Stage Summary:
   - src/hooks/use-workspace.ts
   - src/app/dashboard/page.tsx
   - src/app/dashboard/error.tsx (new)
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix "Cannot read properties of null (reading 'name')" error on dashboard
+
+Work Log:
+- Diagnosed root cause: conversations API Supabase fallback returned `lead: null` for every conversation, causing frontend crash on `conv.lead.name`
+- Fixed conversations API route: replaced `lead: null` with actual Supabase REST lookup of lead data by leadId
+- Protected overview-dashboard.tsx: `conv.lead.name` → `conv?.lead?.name || 'Lead sin nombre'`
+- Protected conversations-view.tsx: same fix on lines 57 and 147-148 (3 unsafe accesses)
+- Protected use-conversations hook: added null-check fallback for lead object + error handling
+- Protected WorkspaceSwitcher.tsx: added optional chaining on `data.workspace.name` (3 places)
+- Build + deploy successful
+
+Stage Summary:
+- Root cause: API returned `lead: null` in Supabase fallback → frontend crashed trying to read `.name`
+- All `.name` access points now protected with optional chaining + fallback defaults
+- Deployed to https://vali-auto-flow.vercel.app

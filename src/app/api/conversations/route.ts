@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
-import { isPrismaReachable, findMany } from '@/lib/db-supabase'
+import { isPrismaReachable, findMany, findById } from '@/lib/db-supabase'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -24,14 +24,26 @@ export async function GET(request: Request) {
     // Supabase REST API fallback when Prisma can't connect
     if (!(await isPrismaReachable())) {
       const conversations = await findMany('conversations', { workspaceId }, { orderBy: 'lastMessageAt', orderAsc: false })
-      // Return simplified data without nested includes (lead, messages, toolActions, behavioralTraces)
-      return NextResponse.json(conversations.map((conv: any) => ({
-        ...conv,
-        lead: null,
-        messages: [],
-        toolActions: [],
-        behavioralTraces: [],
-      })))
+
+      // Enrich each conversation with its lead data via Supabase REST
+      const enriched = await Promise.all(
+        conversations.map(async (conv: any) => {
+          let lead = null
+          if (conv.leadId) {
+            const leadData = await findById('leads', conv.leadId, 'id, name, email, company')
+            lead = leadData || { id: conv.leadId, name: 'Lead sin nombre', email: null, company: null }
+          }
+          return {
+            ...conv,
+            lead,
+            messages: [],
+            toolActions: [],
+            behavioralTraces: [],
+          }
+        })
+      )
+
+      return NextResponse.json(enriched)
     }
 
     const conversations = await db.conversation.findMany({

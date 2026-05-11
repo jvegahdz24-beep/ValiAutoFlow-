@@ -54,9 +54,19 @@ export function useConversations(workspaceId: string | null) {
     queryKey: ['conversations', workspaceId],
     queryFn: async () => {
       const res = await fetch(`/api/conversations?workspaceId=${workspaceId}`)
-      return res.json() as Promise<Conversation[]>
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => ({ error: 'Network error' }))
+        throw new Error(errorBody.error || `Conversations API error: ${res.status}`)
+      }
+      const data = await res.json() as Conversation[]
+      // Ensure every conversation has a lead object (even if null from API)
+      return data.map(conv => ({
+        ...conv,
+        lead: conv.lead || { id: conv.leadId || '', name: 'Lead sin nombre', email: null, company: null },
+      }))
     },
     enabled: !!workspaceId,
+    retry: 1,
   })
 }
 

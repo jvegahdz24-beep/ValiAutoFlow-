@@ -54,7 +54,7 @@ export function ConversationsView({ workspaceId }: ConversationsViewProps) {
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <ChannelIcon channel={conv.channel} />
-                      <span className="text-sm font-medium truncate flex-1">{conv.lead.name}</span>
+                      <span className="text-sm font-medium truncate flex-1">{conv.lead?.name || 'Sin nombre'}</span>
                     </div>
                     <div className="flex items-center gap-1.5 mb-1">
                       <StageBadge stage={conv.stage} />
@@ -144,8 +144,8 @@ function ConversationDetail({
           <div className="flex items-center gap-3 border-b border-border/50 p-4">
             <ChannelIcon channel={conversation.channel} className="h-5 w-5" />
             <div className="flex-1">
-              <h3 className="text-sm font-medium">{conversation.lead.name}</h3>
-              <p className="text-xs text-muted-foreground">{conversation.lead.company}</p>
+              <h3 className="text-sm font-medium">{conversation.lead?.name || 'Sin nombre'}</h3>
+              <p className="text-xs text-muted-foreground">{conversation.lead?.company || ''}</p>
             </div>
             <StageBadge stage={conversation.stage} />
             <TemperatureBadge temperature={conversation.temperature} />
