@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getServerSession, requireWorkspaceAccess } from '@/lib/auth';
+import { isPrismaReachable, findConversationById, createRecord, updateRecord } from '@/lib/db-supabase';
 
 // GET /api/conversations/[conversationId] — Get conversation with messages, stage history, cognitive state
 export async function GET(
@@ -13,6 +14,20 @@ export async function GET(
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
     const { conversationId } = await params;
+
+    // Supabase REST API fallback when Prisma can't connect
+    if (!(await isPrismaReachable())) {
+      const conversation = await findConversationById(conversationId);
+      if (!conversation) {
+        return NextResponse.json(
+          { error: 'Conversation not found' },
+          { status: 404 }
+        );
+      }
+      // Verify workspace access
+      await requireWorkspaceAccess(conversation.workspaceId);
+      return NextResponse.json({ conversation });
+    }
 
     const conversation = await db.conversation.findUnique({
       where: { id: conversationId },
@@ -108,31 +123,48 @@ export async function PATCH(
 
     // Track stage change if changed
     if (currentStage && currentStage !== conversation.currentStage) {
-      await db.conversationStage.create({
-        data: {
+      if (await isPrismaReachable()) {
+        await db.conversationStage.create({
+          data: {
+            conversationId,
+            stage: currentStage,
+            confidence: 1.0,
+            triggerReason: 'MANUAL_UPDATE',
+          },
+        });
+      } else {
+        await createRecord('conversation_stages', {
           conversationId,
           stage: currentStage,
           confidence: 1.0,
           triggerReason: 'MANUAL_UPDATE',
-        },
-      });
+        });
+      }
     }
 
-    const updated = await db.conversation.update({
-      where: { id: conversationId },
-      data: {
+    let updated: any;
+    if (await isPrismaReachable()) {
+      updated = await db.conversation.update({
+        where: { id: conversationId },
+        data: {
+          ...(status !== undefined && { status }),
+          ...(currentStage !== undefined && { currentStage }),
+        },
+        include: {
+          contact: {
+            select: { id: true, name: true, email: true },
+          },
+          lead: {
+            select: { id: true, status: true, temperature: true },
+          },
+        },
+      });
+    } else {
+      updated = await updateRecord('conversations', conversationId, {
         ...(status !== undefined && { status }),
         ...(currentStage !== undefined && { currentStage }),
-      },
-      include: {
-        contact: {
-          select: { id: true, name: true, email: true },
-        },
-        lead: {
-          select: { id: true, status: true, temperature: true },
-        },
-      },
-    });
+      });
+    }
 
     return NextResponse.json({ conversation: updated });
   } catch (error: any) {

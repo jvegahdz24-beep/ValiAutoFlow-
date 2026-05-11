@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireWorkspaceAccess } from '@/lib/auth';
-import { isPrismaReachable, findById, count } from '@/lib/db-supabase';
+import { isPrismaReachable, findById, count, updateWorkspace } from '@/lib/db-supabase';
 
 // GET /api/workspaces/[workspaceId] — Get workspace details
 export async function GET(
@@ -114,15 +114,25 @@ export async function PATCH(
       }
     }
 
-    const updated = await db.workspace.update({
-      where: { id: workspaceId },
-      data: {
+    let updated: any;
+    if (await isPrismaReachable()) {
+      updated = await db.workspace.update({
+        where: { id: workspaceId },
+        data: {
+          ...(name !== undefined && { name }),
+          ...(slug !== undefined && { slug }),
+          ...(plan !== undefined && { plan }),
+          ...(settings !== undefined && { settings: JSON.stringify(settings) }),
+        },
+      });
+    } else {
+      updated = await updateWorkspace(workspaceId, {
         ...(name !== undefined && { name }),
         ...(slug !== undefined && { slug }),
         ...(plan !== undefined && { plan }),
         ...(settings !== undefined && { settings: JSON.stringify(settings) }),
-      },
-    });
+      });
+    }
 
     return NextResponse.json({ workspace: updated });
   } catch (error: any) {

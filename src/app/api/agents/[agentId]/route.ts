@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getServerSession, requireWorkspaceAccess } from '@/lib/auth';
+import { isPrismaReachable, updateRecord } from '@/lib/db-supabase';
 
 // GET /api/agents/[agentId] — Get agent details with recent executions
 export async function GET(
@@ -118,16 +119,27 @@ export async function PATCH(
     // Verify workspace access
     await requireWorkspaceAccess(agent.workspaceId);
 
-    const updated = await db.agent.update({
-      where: { id: agentId },
-      data: {
+    let updated: any;
+    if (await isPrismaReachable()) {
+      updated = await db.agent.update({
+        where: { id: agentId },
+        data: {
+          ...(name !== undefined && { name }),
+          ...(description !== undefined && { description }),
+          ...(config !== undefined && { config: JSON.stringify(config) }),
+          ...(isActive !== undefined && { isActive }),
+          version: { increment: 1 },
+        },
+      });
+    } else {
+      updated = await updateRecord('agents', agentId, {
         ...(name !== undefined && { name }),
         ...(description !== undefined && { description }),
         ...(config !== undefined && { config: JSON.stringify(config) }),
         ...(isActive !== undefined && { isActive }),
-        version: { increment: 1 },
-      },
-    });
+        version: (agent.version || 0) + 1,
+      });
+    }
 
     return NextResponse.json({ agent: updated });
   } catch (error: any) {

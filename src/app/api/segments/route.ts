@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from '@/lib/auth'
+import { isPrismaReachable, createRecord } from '@/lib/db-supabase'
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession()
@@ -29,16 +30,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
     const body = await request.json()
-    const segment = await db.segment.create({
-      data: {
+    let segment: any;
+    if (await isPrismaReachable()) {
+      segment = await db.segment.create({
+        data: {
+          workspaceId: body.workspaceId,
+          name: body.name,
+          description: body.description || '',
+          conditions: JSON.stringify(body.conditions || {}),
+          leadCount: body.leadCount || 0,
+          isDynamic: body.isDynamic ?? true,
+        },
+      })
+    } else {
+      segment = await createRecord('segments', {
         workspaceId: body.workspaceId,
         name: body.name,
         description: body.description || '',
         conditions: JSON.stringify(body.conditions || {}),
         leadCount: body.leadCount || 0,
         isDynamic: body.isDynamic ?? true,
-      },
-    })
+      })
+    }
     return NextResponse.json({ segment }, { status: 201 })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to create segment' }, { status: 500 })

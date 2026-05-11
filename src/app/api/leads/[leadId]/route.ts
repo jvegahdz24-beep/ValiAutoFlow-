@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getServerSession, requireWorkspaceAccess } from '@/lib/auth';
+import { isPrismaReachable, findLeadById, createRecord, updateRecord } from '@/lib/db-supabase';
 
 // GET /api/leads/[leadId] — Get lead details
 export async function GET(
@@ -13,6 +14,17 @@ export async function GET(
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
     const { leadId } = await params;
+
+    // Supabase REST API fallback when Prisma can't connect
+    if (!(await isPrismaReachable())) {
+      const lead = await findLeadById(leadId);
+      if (!lead) {
+        return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+      }
+      // Verify workspace access
+      await requireWorkspaceAccess(lead.workspaceId);
+      return NextResponse.json({ lead });
+    }
 
     const lead = await db.lead.findUnique({
       where: { id: leadId },
@@ -107,32 +119,74 @@ export async function PATCH(
 
     // Track state transition if status changed
     if (status && status !== lead.status) {
-      await db.stateTransition.create({
-        data: {
+      if (await isPrismaReachable()) {
+        await db.stateTransition.create({
+          data: {
+            leadId,
+            fromStage: lead.status,
+            toStage: status,
+            trigger: 'MANUAL_UPDATE',
+            context: JSON.stringify({ previousStatus: lead.status }),
+          },
+        });
+      } else {
+        await createRecord('state_transitions', {
           leadId,
           fromStage: lead.status,
           toStage: status,
           trigger: 'MANUAL_UPDATE',
           context: JSON.stringify({ previousStatus: lead.status }),
-        },
-      });
+        });
+      }
     }
 
     // Track deal value change if changed
     if (dealValue !== undefined && dealValue !== lead.dealValue) {
-      await db.dealValueHistory.create({
-        data: {
+      if (await isPrismaReachable()) {
+        await db.dealValueHistory.create({
+          data: {
+            leadId,
+            previousValue: lead.dealValue,
+            newValue: dealValue,
+            reason: 'MANUAL_UPDATE',
+          },
+        });
+      } else {
+        await createRecord('deal_value_histories', {
           leadId,
           previousValue: lead.dealValue,
           newValue: dealValue,
           reason: 'MANUAL_UPDATE',
-        },
-      });
+        });
+      }
     }
 
-    const updated = await db.lead.update({
-      where: { id: leadId },
-      data: {
+    let updated: any;
+    if (await isPrismaReachable()) {
+      updated = await db.lead.update({
+        where: { id: leadId },
+        data: {
+          ...(status !== undefined && { status }),
+          ...(temperature !== undefined && { temperature }),
+          ...(archetype !== undefined && { archetype }),
+          ...(score !== undefined && { score }),
+          ...(dealValue !== undefined && { dealValue }),
+          ...(assignedAgentId !== undefined && { assignedAgentId }),
+          ...(pipelineStage !== undefined && { pipelineStage }),
+          ...(lostReason !== undefined && { lostReason }),
+          ...(lastContactAt !== undefined && {
+            lastContactAt: new Date(lastContactAt),
+          }),
+        },
+        include: {
+          contact: true,
+          assignedAgent: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+      });
+    } else {
+      updated = await updateRecord('leads', leadId, {
         ...(status !== undefined && { status }),
         ...(temperature !== undefined && { temperature }),
         ...(archetype !== undefined && { archetype }),
@@ -142,16 +196,10 @@ export async function PATCH(
         ...(pipelineStage !== undefined && { pipelineStage }),
         ...(lostReason !== undefined && { lostReason }),
         ...(lastContactAt !== undefined && {
-          lastContactAt: new Date(lastContactAt),
+          lastContactAt: new Date(lastContactAt).toISOString(),
         }),
-      },
-      include: {
-        contact: true,
-        assignedAgent: {
-          select: { id: true, name: true, email: true },
-        },
-      },
-    });
+      });
+    }
 
     return NextResponse.json({ lead: updated });
   } catch (error: any) {

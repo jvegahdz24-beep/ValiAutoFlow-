@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getServerSession, requireWorkspaceAccess } from '@/lib/auth';
+import { isPrismaReachable, createRecord, updateRecord } from '@/lib/db-supabase';
 
 // GET /api/conversations/[conversationId]/messages — List messages (paginated)
 export async function GET(
@@ -110,8 +111,22 @@ export async function POST(
     await requireWorkspaceAccess(conversation.workspaceId);
 
     // Create message
-    const message = await db.message.create({
-      data: {
+    let message: any;
+    if (await isPrismaReachable()) {
+      message = await db.message.create({
+        data: {
+          conversationId,
+          direction,
+          content,
+          senderType,
+          senderId,
+          metadata: metadata ? JSON.stringify(metadata) : '{}',
+          status: 'PENDING',
+          templateUsed,
+        },
+      });
+    } else {
+      message = await createRecord('messages', {
         conversationId,
         direction,
         content,
@@ -120,30 +135,50 @@ export async function POST(
         metadata: metadata ? JSON.stringify(metadata) : '{}',
         status: 'PENDING',
         templateUsed,
-      },
-    });
+      });
+    }
 
     // Create initial status history
-    await db.messageStatusHistory.create({
-      data: {
+    if (await isPrismaReachable()) {
+      await db.messageStatusHistory.create({
+        data: {
+          messageId: message.id,
+          status: 'PENDING',
+          metadata: '{}',
+        },
+      });
+    } else {
+      await createRecord('message_status_histories', {
         messageId: message.id,
         status: 'PENDING',
         metadata: '{}',
-      },
-    });
+      });
+    }
 
     // Update conversation's lastMessageAt
-    await db.conversation.update({
-      where: { id: conversationId },
-      data: { lastMessageAt: new Date() },
-    });
+    if (await isPrismaReachable()) {
+      await db.conversation.update({
+        where: { id: conversationId },
+        data: { lastMessageAt: new Date() },
+      });
+    } else {
+      await updateRecord('conversations', conversationId, {
+        lastMessageAt: new Date().toISOString(),
+      });
+    }
 
     // Update lead's lastContactAt if conversation has a lead
     if (conversation.leadId) {
-      await db.lead.update({
-        where: { id: conversation.leadId },
-        data: { lastContactAt: new Date() },
-      });
+      if (await isPrismaReachable()) {
+        await db.lead.update({
+          where: { id: conversation.leadId },
+          data: { lastContactAt: new Date() },
+        });
+      } else {
+        await updateRecord('leads', conversation.leadId, {
+          lastContactAt: new Date().toISOString(),
+        });
+      }
     }
 
     // Note: In a full implementation, this would trigger the orchestration engine
