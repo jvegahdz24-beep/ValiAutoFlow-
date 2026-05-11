@@ -1,15 +1,21 @@
 // ============================================================
-// BAILEYS WHATSAPP CLIENT — Direct WhatsApp Web Connection
+// BAILEYS WHATSAPP CLIENT — Serverless-Compatible Direct Connection
 // ============================================================
 // Integrates @whiskeysockets/baileys directly into ValiAutoFlow
 // without requiring Evolution API or any external service.
 //
-// Architecture:
+// Architecture for Vercel Serverless:
 // - Singleton socket per workspace (in-memory while function warm)
-// - Auth state persisted to Supabase (whatsapp_configs.baileysAuthState)
-// - QR code generation for phone scanning
-// - Auto-reconnection on disconnect
+// - Auth state persisted to Supabase (whatsapp_configs table)
+// - QR code generation for phone scanning (one-shot per request)
+// - Auto-reconnection on disconnect (if function still warm)
 // - Incoming messages forwarded to JHON engine pipeline
+// - Graceful degradation: connection lost = reconnect on next request
+//
+// Key Limitations:
+// - WebSocket connection dies when serverless function goes cold
+// - Auth state survives via Supabase (reconnect without new QR)
+// - For 24/7 persistent connection, use a VPS/Railway server
 // ============================================================
 
 import makeWASocket, {
@@ -17,9 +23,7 @@ import makeWASocket, {
   DisconnectReason,
   type WASocket,
   type ConnectionState,
-  type Browsers,
 } from '@whiskeysockets/baileys'
-import { Boom } from '@hapi/boom'
 import QRCode from 'qrcode'
 import fs from 'fs'
 import path from 'path'
@@ -41,10 +45,12 @@ interface BaileysSession {
   userName: string | null
   lastConnectedAt: Date | null
   workspaceId: string
+  saveCreds: (() => Promise<void>) | null
+  authDir: string | null
 }
 
 interface BaileysQRResult {
-  qr: string | null        // base64 PNG image
+  qr: string | null        // base64 PNG data URL
   qrString: string | null  // raw QR string
   pairingCode: string | null
   status: BaileysConnectionStatus
@@ -59,25 +65,44 @@ interface BaileysStatusResult {
 }
 
 // ============================================================
-// Supabase Admin Client
+// Supabase Admin Client (reuses same pattern as db-supabase.ts)
 // ============================================================
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://fnqhxtqkjbawajmollfg.supabase.co'
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZucWh4dHFramJhd2FqbW9sbGZnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzM4NzA2OSwiZXhwIjoyMDg4OTYzMDY5fQ.k95PFOztjqsw7BHoywuDeXnGs9zUdStv1j2YlmODiC8'
+function getSupabaseUrl(): string {
+  return process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://fnqhxtqkjbawajmollfg.supabase.co'
+}
+
+function getSupabaseServiceKey(): string {
+  const b64 = process.env.SUPABASE_SERVICE_ROLE_KEY_B64 || ''
+  const raw = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
+  if (b64) {
+    try {
+      const decoded = Buffer.from(b64, 'base64').toString('utf-8')
+      if (decoded.startsWith('eyJ')) return decoded
+    } catch {}
+  }
+
+  return raw || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZucWh4dHFramJhd2FqbW9sbGZnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzM4NzA2OSwiZXhwIjoyMDg4OTYzMDY5fQ.k95PFOztjqsw7BHoywuDeXnGs9zUdStv1j2YlmODiC8'
+}
 
 let adminClient: SupabaseClient | null = null
+let cachedKey = ''
 
 function getAdminClient(): SupabaseClient {
-  if (!adminClient) {
-    adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+  const key = getSupabaseServiceKey()
+  if (!adminClient || cachedKey !== key) {
+    adminClient = createClient(getSupabaseUrl(), key, {
       auth: { autoRefreshToken: false, persistSession: false },
+      db: { schema: 'public' },
     })
+    cachedKey = key
   }
   return adminClient
 }
 
 // ============================================================
-// In-Memory Session Store (per workspace)
+// In-Memory Session Store (per workspace, survives while function warm)
 // ============================================================
 
 const sessions = new Map<string, BaileysSession>()
@@ -94,6 +119,8 @@ function getSession(workspaceId: string): BaileysSession {
       userName: null,
       lastConnectedAt: null,
       workspaceId,
+      saveCreds: null,
+      authDir: null,
     })
   }
   return sessions.get(workspaceId)!
@@ -110,9 +137,9 @@ function getAuthDir(workspaceId: string): string {
 }
 
 /**
- * Save auth state files from /tmp to Supabase as JSON blob
- * Uses `baileysAuthState` column if available, otherwise falls back
- * to `accessToken` column (which is empty for Baileys connections).
+ * Save auth state files from /tmp to Supabase as JSON blob.
+ * Stores in `accessToken` column with `baileys_auth:` prefix as fallback
+ * (the `baileysAuthState` column may not exist yet).
  */
 async function saveAuthStateToSupabase(workspaceId: string, authDir: string): Promise<void> {
   try {
@@ -145,7 +172,7 @@ async function saveAuthStateToSupabase(workspaceId: string, authDir: string): Pr
 
     if (error) {
       // Column doesn't exist yet — use accessToken as fallback storage
-      console.warn('[Baileys] baileysAuthState column not found, using accessToken fallback')
+      console.warn('[Baileys] baileysAuthState column not found, using accessToken fallback:', error.message)
       const { error: error2 } = await supabase
         .from('whatsapp_configs')
         .update({
@@ -158,7 +185,7 @@ async function saveAuthStateToSupabase(workspaceId: string, authDir: string): Pr
       if (error2) {
         console.error('[Baileys] Could not save auth state:', error2.message)
       } else {
-        console.log('[Baileys] Auth state saved to Supabase (accessToken fallback) for workspace', workspaceId.substring(0, 8))
+        console.log('[Baileys] Auth state saved (accessToken fallback) for workspace', workspaceId.substring(0, 8))
       }
     } else {
       console.log('[Baileys] Auth state saved to Supabase for workspace', workspaceId.substring(0, 8))
@@ -169,12 +196,14 @@ async function saveAuthStateToSupabase(workspaceId: string, authDir: string): Pr
 }
 
 /**
- * Restore auth state files from Supabase to /tmp directory
- * Checks `baileysAuthState` column first, then falls back to `accessToken`.
+ * Restore auth state files from Supabase to /tmp directory.
+ * Returns true if auth state was found and restored.
  */
 async function restoreAuthStateFromSupabase(workspaceId: string, authDir: string): Promise<boolean> {
   try {
     const supabase = getAdminClient()
+
+    // Try with baileysAuthState column first
     const { data, error } = await supabase
       .from('whatsapp_configs')
       .select('baileysAuthState, accessToken')
@@ -184,10 +213,9 @@ async function restoreAuthStateFromSupabase(workspaceId: string, authDir: string
     let authStateJson: string | null = null
 
     if (!error && data?.baileysAuthState) {
-      authStateJson = data.baileysAuthState
+      authStateJson = data.baileysAuthState as string
     } else if (!error && data?.accessToken?.startsWith('baileys_auth:')) {
-      // Fallback: auth state stored in accessToken
-      authStateJson = data.accessToken.substring('baileys_auth:'.length)
+      authStateJson = (data.accessToken as string).substring('baileys_auth:'.length)
     } else {
       // Try selecting only accessToken if baileysAuthState column doesn't exist
       const { data: data2, error: error2 } = await supabase
@@ -197,7 +225,7 @@ async function restoreAuthStateFromSupabase(workspaceId: string, authDir: string
         .single()
 
       if (!error2 && data2?.accessToken?.startsWith('baileys_auth:')) {
-        authStateJson = data2.accessToken.substring('baileys_auth:'.length)
+        authStateJson = (data2.accessToken as string).substring('baileys_auth:'.length)
       }
     }
 
@@ -214,7 +242,7 @@ async function restoreAuthStateFromSupabase(workspaceId: string, authDir: string
       fs.writeFileSync(path.join(authDir, filename), content, 'utf-8')
     }
 
-    console.log('[Baileys] Auth state restored from Supabase for workspace', workspaceId.substring(0, 8))
+    console.log('[Baileys] Auth state restored from Supabase for workspace', workspaceId.substring(0, 8), '- files:', Object.keys(files).join(', '))
     return true
   } catch (err: any) {
     console.error('[Baileys] Error restoring auth state:', err.message)
@@ -223,8 +251,8 @@ async function restoreAuthStateFromSupabase(workspaceId: string, authDir: string
 }
 
 /**
- * Update connection status in Supabase
- * Uses baileys* columns if available, falls back to existing columns.
+ * Update connection status in Supabase.
+ * Uses available columns with creative fallbacks.
  */
 async function updateConnectionStatus(
   workspaceId: string,
@@ -250,7 +278,6 @@ async function updateConnectionStatus(
       updateData.lastSyncAt = new Date().toISOString()
       updateData.connectionType = 'baileys'
       updateData.channelName = 'bielys'
-      // Store phone in businessAccountId as fallback
       if (phone) {
         updateData.businessAccountId = `baileys:${phone}`
       }
@@ -262,8 +289,7 @@ async function updateConnectionStatus(
       .eq('workspaceId', workspaceId)
 
     if (error) {
-      // New columns don't exist — use basic columns with creative fallback
-      console.warn('[Baileys] Some columns not found, using basic columns fallback')
+      console.warn('[Baileys] Some columns not found, using basic columns fallback:', error.message)
       const basicUpdate: Record<string, unknown> = {
         isActive: connected,
         updatedAt: new Date().toISOString(),
@@ -271,14 +297,11 @@ async function updateConnectionStatus(
 
       if (connected) {
         basicUpdate.lastSyncAt = new Date().toISOString()
-        // Store phone in businessAccountId as fallback
         if (phone) {
           basicUpdate.businessAccountId = `baileys:${phone}`
         }
-        // Store connection type marker in wabaId
         basicUpdate.wabaId = 'baileys'
       } else {
-        // Clear the Baileys auth state from accessToken on disconnect
         basicUpdate.businessAccountId = null
       }
 
@@ -289,11 +312,49 @@ async function updateConnectionStatus(
 
       if (error2) {
         console.warn('[Baileys] Basic update also failed:', error2.message)
+        // Last resort: just update isActive
+        try {
+          await supabase
+            .from('whatsapp_configs')
+            .update({ isActive: connected, updatedAt: new Date().toISOString() })
+            .eq('workspaceId', workspaceId)
+        } catch {}
       }
     }
   } catch (err: any) {
     console.error('[Baileys] Error updating connection status:', err.message)
   }
+}
+
+// ============================================================
+// Extract disconnect status code (without importing @hapi/boom)
+// ============================================================
+
+/**
+ * Extract the status code from a Baileys disconnect error.
+ * Avoids direct dependency on @hapi/boom by using duck typing.
+ */
+function getDisconnectStatusCode(lastDisconnect: any): number | undefined {
+  if (!lastDisconnect?.error) return undefined
+
+  const err = lastDisconnect.error
+
+  // @hapi/boom stores status in error.output.statusCode
+  if (err.output?.statusCode) return err.output.statusCode
+
+  // Some versions store it differently
+  if (err.statusCode) return err.statusCode
+
+  // Check the data property
+  if (err.data?.statusCode) return err.data.statusCode
+
+  // Try to parse from the error message
+  if (typeof err.message === 'string') {
+    const match = err.message.match(/status code[:\s]+(\d+)/i)
+    if (match) return parseInt(match[1], 10)
+  }
+
+  return undefined
 }
 
 // ============================================================
@@ -318,12 +379,12 @@ export async function initBaileysSocket(workspaceId: string): Promise<BaileysQRR
     }
   }
 
-  // If currently connecting, wait a bit and return current state
-  if (session.status === 'connecting') {
-    // Wait up to 10 seconds for QR
-    for (let i = 0; i < 20; i++) {
+  // If currently connecting with QR ready, wait and return current state
+  if (session.status === 'connecting' || session.status === 'qr_ready') {
+    // Wait up to 15 seconds for QR or connection
+    for (let i = 0; i < 30; i++) {
       await sleep(500)
-      if (session.qrString || session.status === 'connected' || session.status === 'qr_ready') {
+      if (session.qrImageBase64 || (session.status as string) === 'connected') {
         break
       }
     }
@@ -340,6 +401,7 @@ export async function initBaileysSocket(workspaceId: string): Promise<BaileysQRR
 
   // Restore auth state from Supabase
   const hasExistingAuth = await restoreAuthStateFromSupabase(workspaceId, authDir)
+  console.log('[Baileys] Existing auth state:', hasExistingAuth, 'for workspace', workspaceId.substring(0, 8))
 
   // Clean up existing socket if any
   if (session.socket) {
@@ -355,27 +417,39 @@ export async function initBaileysSocket(workspaceId: string): Promise<BaileysQRR
   session.pairingCode = null
 
   try {
+    // Ensure /tmp directory exists
+    fs.mkdirSync(authDir, { recursive: true })
+
     // Use multi-file auth state (reads/writes to /tmp)
     const { state, saveCreds } = await useMultiFileAuthState(authDir)
+    session.saveCreds = saveCreds
+    session.authDir = authDir
 
-    // Create the socket
+    // Create the socket with serverless-friendly settings
     const socket = makeWASocket({
       auth: state,
       printQRInTerminal: false,
       browser: ['ValiAutoFlow', 'Chrome', '1.0'] as any,
-      connectTimeoutMs: 30_000,
-      keepAliveIntervalMs: 25_000,
-      // Mobile proxy is not needed for QR scanning
-      defaultQueryTimeoutMs: 60_000,
+      connectTimeoutMs: 20_000,     // 20s connection timeout
+      keepAliveIntervalMs: 25_000,   // Keep alive ping
+      defaultQueryTimeoutMs: 30_000, // 30s for queries
+      retryRequestDelayMs: 250,      // Faster retries
+      maxMsgRetryCount: 3,
+      // Important for serverless: don't use mobile API
+      mobile: false,
     })
 
     session.socket = socket
 
     // ─── Handle credentials updates ───────────────────────
     socket.ev.on('creds.update', async () => {
-      await saveCreds()
-      // Save auth state to Supabase after each credential update
-      await saveAuthStateToSupabase(workspaceId, authDir)
+      try {
+        await saveCreds()
+        // Save auth state to Supabase after each credential update
+        await saveAuthStateToSupabase(workspaceId, authDir)
+      } catch (err: any) {
+        console.error('[Baileys] Error in creds.update:', err.message)
+      }
     })
 
     // ─── Handle connection updates ────────────────────────
@@ -388,7 +462,7 @@ export async function initBaileysSocket(workspaceId: string): Promise<BaileysQRR
         session.status = 'qr_ready'
 
         try {
-          // Generate QR code image as base64 PNG
+          // Generate QR code image as base64 PNG data URL
           const qrImage = await QRCode.toDataURL(qr, {
             width: 512,
             margin: 2,
@@ -397,13 +471,20 @@ export async function initBaileysSocket(workspaceId: string): Promise<BaileysQRR
           session.qrImageBase64 = qrImage
         } catch (err: any) {
           console.error('[Baileys] Error generating QR image:', err.message)
-          session.qrImageBase64 = null
+          // Fallback: try simpler QR generation
+          try {
+            const qrBuffer = await QRCode.toBuffer(qr, { width: 256, margin: 1 })
+            session.qrImageBase64 = `data:image/png;base64,${qrBuffer.toString('base64')}`
+          } catch (err2: any) {
+            console.error('[Baileys] Fallback QR generation also failed:', err2.message)
+            session.qrImageBase64 = null
+          }
         }
 
         console.log('[Baileys] QR code generated for workspace', workspaceId.substring(0, 8))
       }
 
-      // Connection opened (user scanned QR)
+      // Connection opened (user scanned QR or reconnected with saved state)
       if (connection === 'open') {
         session.status = 'connected'
         session.qrString = null
@@ -425,30 +506,33 @@ export async function initBaileysSocket(workspaceId: string): Promise<BaileysQRR
 
       // Connection closed
       if (connection === 'close') {
-        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
+        const statusCode = getDisconnectStatusCode(lastDisconnect)
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut
+          && statusCode !== 401
+          && statusCode !== 403
 
         console.log('[Baileys] Connection closed. Status code:', statusCode, 'Should reconnect:', shouldReconnect)
 
-        if (shouldReconnect) {
+        if (shouldReconnect && session.status !== 'disconnected') {
           session.status = 'disconnected'
-          // Auto-reconnect after delay
+          // Auto-reconnect after delay (only if function is still warm)
           setTimeout(async () => {
-            console.log('[Baileys] Auto-reconnecting...')
-            try {
-              await initBaileysSocket(workspaceId)
-            } catch (err: any) {
-              console.error('[Baileys] Reconnection failed:', err.message)
+            if (session.status === 'disconnected') {
+              console.log('[Baileys] Auto-reconnecting...')
+              try {
+                await initBaileysSocket(workspaceId)
+              } catch (err: any) {
+                console.error('[Baileys] Reconnection failed:', err.message)
+              }
             }
-          }, 3000)
+          }, 5000)
         } else {
-          // User logged out — clean up
+          // User logged out or fatal error — clean up
           session.status = 'disconnected'
           session.socket = null
           session.phone = null
           session.userName = null
           await updateConnectionStatus(workspaceId, false)
-          // Clean up auth files
           cleanAuthDir(workspaceId)
         }
       }
@@ -471,18 +555,20 @@ export async function initBaileysSocket(workspaceId: string): Promise<BaileysQRR
       }
     })
 
-    // Wait for QR or connection (up to 25 seconds)
+    // ─── Wait for QR or connection ─────────────────────────
+    // Wait up to 20 seconds for QR generation or connection
     const qrPromise = new Promise<BaileysQRResult>((resolve) => {
       const timeout = setTimeout(() => {
+        console.log('[Baileys] Timed out waiting for QR/connection, returning current state:', session.status)
         resolve({
           qr: session.qrImageBase64,
           qrString: session.qrString,
           pairingCode: session.pairingCode,
           status: session.status,
         })
-      }, 25_000)
+      }, 20_000)
 
-      // Check periodically
+      // Check periodically for QR or connection
       const checkInterval = setInterval(() => {
         if (session.qrImageBase64 || session.status === 'connected') {
           clearTimeout(timeout)
@@ -494,21 +580,26 @@ export async function initBaileysSocket(workspaceId: string): Promise<BaileysQRR
             status: session.status,
           })
         }
-      }, 500)
+      }, 300)
     })
 
     return await qrPromise
 
   } catch (error: any) {
     console.error('[Baileys] Error initializing socket:', error.message)
+    console.error('[Baileys] Error stack:', error.stack?.substring(0, 500))
+
     session.status = 'disconnected'
     session.socket = null
+
+    // Return a meaningful error rather than throwing
     return {
       qr: null,
       qrString: null,
       pairingCode: null,
       status: 'disconnected',
-    }
+      error: error.message,
+    } as BaileysQRResult & { error: string }
   }
 }
 
@@ -538,25 +629,32 @@ export async function getBaileysStatus(workspaceId: string): Promise<BaileysStat
   try {
     const supabase = getAdminClient()
 
-    // Try with baileys* columns first
+    // Try with all available columns
     const { data, error } = await supabase
       .from('whatsapp_configs')
-      .select('isActive, baileysConnected, baileysPhone, connectionType, lastSyncAt, businessAccountId, wabaId')
+      .select('isActive, baileysConnected, baileysPhone, connectionType, lastSyncAt, businessAccountId, wabaId, channelName')
       .eq('workspaceId', workspaceId)
       .single()
 
     if (!error && data) {
-      // Check via baileys* columns
-      const isConnected = data.baileysConnected === true || (data.connectionType === 'baileys' && data.isActive === true)
+      // Check via baileys* columns or markers
+      const isBaileysConnection =
+        data.connectionType === 'baileys' ||
+        data.wabaId === 'baileys' ||
+        data.businessAccountId?.startsWith('baileys:') ||
+        data.channelName === 'bielys'
 
-      // Fallback: check wabaId marker or businessAccountId prefix
-      const isBaileysConnection = data.connectionType === 'baileys' || data.wabaId === 'baileys' || data.businessAccountId?.startsWith('baileys:')
+      const isConnected = (data.baileysConnected === true) ||
+        (isBaileysConnection && data.isActive === true)
 
-      const phone = data.baileysPhone || (data.businessAccountId?.startsWith('baileys:') ? data.businessAccountId.replace('baileys:', '') : null)
+      const phone = data.baileysPhone ||
+        (data.businessAccountId?.startsWith('baileys:')
+          ? (data.businessAccountId as string).replace('baileys:', '')
+          : null)
 
       return {
-        connected: isConnected || (isBaileysConnection && data.isActive === true),
-        status: (isConnected || (isBaileysConnection && data.isActive)) ? 'connected' : 'disconnected',
+        connected: isConnected,
+        status: isConnected ? 'connected' : 'disconnected',
         phone,
         userName: null,
         lastConnectedAt: data.lastSyncAt || null,
@@ -572,7 +670,9 @@ export async function getBaileysStatus(workspaceId: string): Promise<BaileysStat
 
     if (!error2 && data2) {
       const isBaileys = data2.wabaId === 'baileys' || data2.businessAccountId?.startsWith('baileys:')
-      const phone = data2.businessAccountId?.startsWith('baileys:') ? data2.businessAccountId.replace('baileys:', '') : null
+      const phone = data2.businessAccountId?.startsWith('baileys:')
+        ? (data2.businessAccountId as string).replace('baileys:', '')
+        : null
 
       return {
         connected: isBaileys && data2.isActive === true,
@@ -619,6 +719,7 @@ export async function disconnectBaileys(workspaceId: string, clearSession = true
     session.pairingCode = null
     session.phone = null
     session.userName = null
+    session.saveCreds = null
 
     if (clearSession) {
       cleanAuthDir(workspaceId)
@@ -634,9 +735,9 @@ export async function disconnectBaileys(workspaceId: string, clearSession = true
             baileysConnected: false,
             baileysPhone: null,
             isActive: false,
-            accessToken: '',  // Clear auth state fallback
-            businessAccountId: null, // Clear phone fallback
-            wabaId: null,    // Clear connection type marker
+            accessToken: '',
+            businessAccountId: null,
+            wabaId: null,
             updatedAt: new Date().toISOString(),
           })
           .eq('workspaceId', workspaceId)
@@ -647,7 +748,7 @@ export async function disconnectBaileys(workspaceId: string, clearSession = true
             .from('whatsapp_configs')
             .update({
               isActive: false,
-              accessToken: '',  // Clear auth state stored as fallback
+              accessToken: '',
               businessAccountId: null,
               wabaId: null,
               updatedAt: new Date().toISOString(),
@@ -656,15 +757,12 @@ export async function disconnectBaileys(workspaceId: string, clearSession = true
         }
       } catch (err: any) {
         console.warn('[Baileys] Error clearing Supabase session:', err.message)
-        // Last resort: just clear isActive
+        // Last resort
         try {
           const supabase = getAdminClient()
           await supabase
             .from('whatsapp_configs')
-            .update({
-              isActive: false,
-              updatedAt: new Date().toISOString(),
-            })
+            .update({ isActive: false, updatedAt: new Date().toISOString() })
             .eq('workspaceId', workspaceId)
         } catch {}
       }
@@ -686,16 +784,26 @@ export async function disconnectBaileys(workspaceId: string, clearSession = true
 
 /**
  * Send a text message via the Baileys socket.
+ * If not connected, attempts to reconnect first using saved auth state.
  */
 export async function sendBaileysMessage(
   workspaceId: string,
-  jid: string,  // WhatsApp JID (e.g., "5212345678900@s.whatsapp.net")
+  jid: string,
   text: string,
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const session = getSession(workspaceId)
 
+  // If not connected, try to reconnect
   if (!session.socket || session.status !== 'connected') {
-    return { success: false, error: 'WhatsApp no está conectado' }
+    console.log('[Baileys] Not connected, attempting reconnect for message send...')
+    const result = await initBaileysSocket(workspaceId)
+    if (result.status !== 'connected') {
+      return { success: false, error: 'WhatsApp no está conectado y no se pudo reconectar' }
+    }
+  }
+
+  if (!session.socket) {
+    return { success: false, error: 'WhatsApp socket no disponible' }
   }
 
   try {
@@ -722,10 +830,10 @@ export function getBaileysSocket(workspaceId: string): WASocket | null {
 // ============================================================
 
 async function handleIncomingMessage(workspaceId: string, msg: any): Promise<void> {
-  const from = msg.key.remoteJid  // e.g., "5212345678900@s.whatsapp.net"
-  const fromPhone = from?.replace('@s.whatsapp.net', '').replace('@s.whatsapp.net', '')
+  const from = msg.key.remoteJid
+  const fromPhone = from?.replace('@s.whatsapp.net', '')
 
-  // Extract text content
+  // Extract text content from various message types
   let textContent = ''
   if (msg.message?.conversation) {
     textContent = msg.message.conversation
@@ -836,7 +944,11 @@ export async function ensureBaileysConfig(workspaceId: string): Promise<void> {
           })
         if (insertError2) {
           console.warn('[Baileys] Could not create config:', insertError2.message)
+        } else {
+          console.log('[Baileys] Created config (basic columns) for workspace', workspaceId.substring(0, 8))
         }
+      } else {
+        console.log('[Baileys] Created config for workspace', workspaceId.substring(0, 8))
       }
     } else if (existing.connectionType !== 'baileys') {
       // Update to baileys

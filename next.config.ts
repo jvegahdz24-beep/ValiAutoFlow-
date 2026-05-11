@@ -7,6 +7,16 @@ const nextConfig: NextConfig = {
     // Run type checking separately in CI — don't block the build
     ignoreBuildErrors: process.env.CI !== "true",
   },
+  // Critical: Baileys uses Node.js APIs (fs, net, crypto, tls) that can't be
+  // bundled for edge/browser. These packages MUST be externalized for serverless.
+  serverExternalPackages: [
+    '@whiskeysockets/baileys',
+    '@hapi/boom',
+    'pino',
+    'qrcode',
+    'ws',
+    'sharp',
+  ],
   images: {
     remotePatterns: [
       {

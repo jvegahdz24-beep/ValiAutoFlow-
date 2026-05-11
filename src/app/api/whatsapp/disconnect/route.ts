@@ -1,14 +1,16 @@
 // ============================================================
-// BAILEYS DISCONNECT ENDPOINT
+// BAILEYS DISCONNECT ENDPOINT — Serverless-Compatible
 // ============================================================
 // POST /api/whatsapp/disconnect
-// Disconnects the Baileys WhatsApp session.
 // Body: { workspaceId: string, clearSession?: boolean }
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
 import { disconnectBaileys } from '@/lib/whatsapp/baileys'
+
+export const maxDuration = 10
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {

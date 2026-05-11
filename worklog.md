@@ -72,3 +72,48 @@ Stage Summary:
   ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS "baileysPhone" TEXT;
 - Code works without migration via column fallback (accessToken, businessAccountId, wabaId)
 - App URL: https://vali-auto-flow.vercel.app
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix /api/whatsapp/qr endpoint — serverless Baileys not working
+
+Work Log:
+- Diagnosed root causes of endpoint failure:
+  1. @hapi/boom imported directly but not a direct dependency → runtime import failure
+  2. Missing serverExternalPackages in next.config.ts → Baileys (uses fs, net, crypto, ws) gets incorrectly bundled by Next.js for serverless
+  3. No maxDuration on API routes → Vercel default 10s timeout kills connection before QR generated
+  4. No dynamic = 'force-dynamic' → route might be cached/stale
+- Fixed next.config.ts: Added serverExternalPackages for @whiskeysockets/baileys, @hapi/boom, pino, qrcode, ws, sharp
+- Rewrote src/lib/whatsapp/baileys.ts:
+  - Removed @hapi/boom import — replaced with getDisconnectStatusCode() duck-typing helper
+  - Better error handling: catch and return error message instead of throwing
+  - QR generation fallback: if toDataURL fails, try toBuffer as backup
+  - More robust Supabase auth state save/restore
+  - Added session.saveCreds and session.authDir tracking
+  - Reduced QR wait timeout from 25s to 20s
+  - Faster polling interval (300ms instead of 500ms)
+  - Better logging for debugging serverless issues
+- Rewrote src/app/api/whatsapp/qr/route.ts:
+  - Added export const maxDuration = 60
+  - Added export const dynamic = 'force-dynamic'
+  - Better error messages including Baileys init errors
+  - Support both body and URL params for workspaceId
+  - Added hint message for persistent connection errors
+- Rewrote src/app/api/whatsapp/status/route.ts:
+  - Added maxDuration = 10
+  - Added dynamic = 'force-dynamic'
+- Rewrote src/app/api/whatsapp/disconnect/route.ts:
+  - Added maxDuration = 10
+  - Added dynamic = 'force-dynamic'
+- Installed @hapi/boom@10.0.1 as direct dependency
+- Build passes successfully with no TypeScript errors in modified files
+
+Stage Summary:
+- All 3 critical fixes applied: serverExternalPackages, maxDuration, @hapi/boom removal
+- Build compiles cleanly
+- Endpoints registered: /api/whatsapp/qr, /api/whatsapp/status, /api/whatsapp/disconnect
+- Key limitation: Baileys WebSocket connection dies when Vercel function goes cold
+  - Auth state persists in Supabase → reconnection without new QR scan
+  - For 24/7 persistent connection, need VPS/Railway server
+- Needs deployment to Vercel to test

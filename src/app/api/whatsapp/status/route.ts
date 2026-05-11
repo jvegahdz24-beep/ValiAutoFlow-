@@ -1,5 +1,5 @@
 // ============================================================
-// BAILEYS CONNECTION STATUS ENDPOINT
+// BAILEYS CONNECTION STATUS ENDPOINT — Serverless-Compatible
 // ============================================================
 // GET /api/whatsapp/status?workspaceId=xxx
 // Returns current WhatsApp connection status via Baileys.
@@ -8,6 +8,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
 import { getBaileysStatus } from '@/lib/whatsapp/baileys'
+
+export const maxDuration = 10
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,7 +42,7 @@ export async function GET(request: NextRequest) {
     if (error?.message === 'You do not have access to this workspace') {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
-    console.error('[WhatsApp/Status] Error:', error)
+    console.error('[WhatsApp/Status] Error:', error.message)
     return NextResponse.json(
       { error: `Error obteniendo estado: ${error.message}` },
       { status: 500 }
