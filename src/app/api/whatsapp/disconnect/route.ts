@@ -1,16 +1,26 @@
 // ============================================================
-// BAILEYS DISCONNECT ENDPOINT — Serverless-Compatible
+// WHATSAPP DISCONNECT ENDPOINT — Hybrid: Evolution API + Baileys
 // ============================================================
 // POST /api/whatsapp/disconnect
 // Body: { workspaceId: string, clearSession?: boolean }
+//
+// Strategy:
+//   1. If EVOLUTION_API_URL configured → disconnect via Evolution API
+//   2. Otherwise → disconnect in-process Baileys
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
 import { disconnectBaileys } from '@/lib/whatsapp/baileys'
+import { isEvolutionConfigured, logoutInstance } from '@/lib/whatsapp/evolution-api'
+import { findWhatsAppConfig, upsertWhatsAppConfig } from '@/lib/db-supabase'
 
 export const maxDuration = 10
 export const dynamic = 'force-dynamic'
+
+function getInstanceName(workspaceId: string): string {
+  return `ws_${workspaceId.substring(0, 8)}`
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,6 +36,31 @@ export async function POST(request: NextRequest) {
 
     await requireWorkspaceAccess(workspaceId)
 
+    // ─── Route: Evolution API ───
+    if (isEvolutionConfigured()) {
+      const instanceName = getInstanceName(workspaceId)
+      const result = await logoutInstance(instanceName)
+
+      if (!result.success) {
+        console.warn('[WhatsApp/Disconnect] Evolution logout failed:', result.error)
+        // Don't fail — still update local DB
+      }
+
+      // Update local DB
+      await upsertWhatsAppConfig(workspaceId, {
+        isActive: false,
+        evolutionConnected: false,
+      })
+
+      return NextResponse.json({
+        success: true,
+        message: clearSession
+          ? 'WhatsApp desconectado y sesión eliminada (vía Evolution API)'
+          : 'WhatsApp desconectado (sesión preservada)',
+      })
+    }
+
+    // ─── Route: Direct Baileys ───
     const result = await disconnectBaileys(workspaceId, clearSession)
 
     if (!result.success) {

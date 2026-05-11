@@ -1,16 +1,26 @@
 // ============================================================
-// BAILEYS CONNECTION STATUS ENDPOINT — Serverless-Compatible
+// WHATSAPP STATUS ENDPOINT — Hybrid: Evolution API + Baileys
 // ============================================================
 // GET /api/whatsapp/status?workspaceId=xxx
-// Returns current WhatsApp connection status via Baileys.
+// Returns current WhatsApp connection status.
+//
+// Strategy:
+//   1. If EVOLUTION_API_URL configured → check via Evolution API
+//   2. Otherwise → check in-process Baileys + Supabase fallback
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireWorkspaceAccess } from '@/lib/auth'
 import { getBaileysStatus } from '@/lib/whatsapp/baileys'
+import { isEvolutionConfigured, getInstanceStatus } from '@/lib/whatsapp/evolution-api'
+import { findWhatsAppConfig } from '@/lib/db-supabase'
 
 export const maxDuration = 10
 export const dynamic = 'force-dynamic'
+
+function getInstanceName(workspaceId: string): string {
+  return `ws_${workspaceId.substring(0, 8)}`
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,6 +36,26 @@ export async function GET(request: NextRequest) {
 
     await requireWorkspaceAccess(workspaceId)
 
+    // ─── Route: Evolution API ───
+    if (isEvolutionConfigured()) {
+      const instanceName = getInstanceName(workspaceId)
+      const result = await getInstanceStatus(instanceName)
+
+      if (result.success) {
+        const isConnected = result.status === 'open'
+        return NextResponse.json({
+          connected: isConnected,
+          status: isConnected ? 'connected' : result.status === 'close' ? 'disconnected' : 'connecting',
+          phone: null, // Will be populated from DB
+          userName: null,
+        })
+      }
+
+      // Evolution API failed — fall through to DB check
+      console.warn('[WhatsApp/Status] Evolution API check failed:', result.error)
+    }
+
+    // ─── Route: Direct Baileys ───
     const status = await getBaileysStatus(workspaceId)
 
     return NextResponse.json({

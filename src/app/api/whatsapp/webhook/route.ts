@@ -93,12 +93,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const rawBody = await request.text()
+    let body: Record<string, unknown>
+    try {
+      body = JSON.parse(rawBody) as Record<string, unknown>
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    }
+
     // ──────────────────────────────────────────────────────────
-    // HMAC SIGNATURE VERIFICATION
+    // EVOLUTION API / BAILEYS RAILWAY MESSAGES
+    // ──────────────────────────────────────────────────────────
+    // Messages from the persistent Baileys server on Railway
+    // have the header x-evolution-source: baileys-railway
+    // and a different JSON format than Meta Cloud API.
+    const evolutionSource = request.headers.get('x-evolution-source')
+    if (evolutionSource === 'baileys-railway' || body.source === 'baileys_railway') {
+      await handleEvolutionMessage(body)
+      return NextResponse.json({ status: 'ok' }, { status: 200 })
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // HMAC SIGNATURE VERIFICATION (Meta Cloud API only)
     // ──────────────────────────────────────────────────────────
     // Meta signs every webhook POST with X-Hub-Signature-256
     // We must verify it to prevent spoofed messages.
-    const rawBody = await request.text()
     const signature = request.headers.get('x-hub-signature-256')
     const appSecret = process.env.WHATSAPP_APP_SECRET || ''
 
@@ -116,13 +135,6 @@ export async function POST(request: NextRequest) {
     } else {
       // Development only: log warning but allow
       console.warn('[WhatsApp Webhook] POST — WHATSAPP_APP_SECRET not set. HMAC verification skipped. SET IT IN PRODUCTION!')
-    }
-
-    let body: Record<string, unknown>
-    try {
-      body = JSON.parse(rawBody) as Record<string, unknown>
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
     }
 
     // ──────────────────────────────────────────────────────────
@@ -552,5 +564,241 @@ async function handleStatusUpdate(
     }
   } catch (error) {
     console.error('[WhatsApp Webhook] handleStatusUpdate error:', error)
+  }
+}
+
+// ============================================================
+// Handle Evolution API / Baileys Railway messages
+// ============================================================
+// Payload format from server-v2.js:
+// {
+//   event: 'messages.upsert',
+//   instance: 'ws_xxxxx',
+//   data: { key, pushName, message, messageTimestamp, source },
+//   from: '521234567890',
+//   text: 'Hello',
+//   isGroup: false,
+//   workspaceId: 'xxx',
+//   phone: '521234567890',    // connected phone
+//   timestamp: '2024-01-01T00:00:00.000Z'
+// }
+// ============================================================
+
+async function handleEvolutionMessage(body: Record<string, unknown>): Promise<void> {
+  try {
+    const from = body.from as string | undefined
+    const text = body.text as string | undefined
+    const workspaceId = body.workspaceId as string | undefined
+    const instanceName = body.instance as string | undefined
+    const data = body.data as Record<string, unknown> | undefined
+    const pushName = (data?.pushName as string) || ''
+    const isGroup = body.isGroup as boolean | false
+    const msgKey = data?.key as Record<string, unknown> | undefined
+    const messageId = msgKey?.id as string | undefined
+
+    if (!from || !text || !workspaceId) {
+      console.warn('[WhatsApp Webhook] Evolution message missing required fields:', { from, text: text?.substring(0, 20), workspaceId })
+      return
+    }
+
+    // Skip group messages for now (can be enabled later)
+    if (isGroup) {
+      console.log('[WhatsApp Webhook] Skipping group message from', from)
+      return
+    }
+
+    console.log(`[WhatsApp Webhook] Evolution message: from=${from}, text="${text.substring(0, 40)}", workspace=${workspaceId.substring(0, 8)}`)
+
+    // Deduplication
+    if (messageId) {
+      let existingMessage: any = null
+      const prismaOK = await isPrismaReachable()
+      if (prismaOK) {
+        existingMessage = await db.message.findUnique({
+          where: { whatsappMessageId: messageId },
+          select: { id: true },
+        })
+      } else {
+        const { data: msgs } = await (await import('@/lib/db-supabase')).findMany('messages', { whatsappMessageId: messageId }, { limit: 1 })
+        existingMessage = msgs?.[0] || null
+      }
+      if (existingMessage) {
+        console.log('[WhatsApp Webhook] Duplicate Evolution messageId:', messageId)
+        return
+      }
+    }
+
+    // Find or create Contact
+    const contactName = pushName || `WhatsApp ${from}`
+    const contactPhone = from
+
+    let contact: any = null
+    const prismaOK3 = await isPrismaReachable()
+    if (prismaOK3) {
+      contact = await db.contact.upsert({
+        where: { id: `${workspaceId}_wa_${contactPhone}` },
+        create: {
+          id: `${workspaceId}_wa_${contactPhone}`,
+          workspaceId,
+          phone: contactPhone,
+          name: contactName,
+          source: 'WHATSAPP',
+          metadata: JSON.stringify({
+            whatsappId: contactPhone,
+            firstMessageAt: new Date().toISOString(),
+            baileysInstance: instanceName,
+          }),
+        },
+        update: {
+          name: contactName !== `WhatsApp ${from}` ? contactName : undefined,
+          phone: contactPhone,
+        },
+      })
+    } else {
+      contact = await upsertContact(workspaceId, contactPhone, {
+        id: `${workspaceId}_wa_${contactPhone}`,
+        name: contactName,
+        source: 'WHATSAPP',
+        metadata: JSON.stringify({
+          whatsappId: contactPhone,
+          firstMessageAt: new Date().toISOString(),
+          baileysInstance: instanceName,
+        }),
+      })
+    }
+
+    // Find or create Conversation
+    let conversation: any = null
+    const prismaOK4 = await isPrismaReachable()
+    if (prismaOK4) {
+      conversation = await db.conversation.findFirst({
+        where: {
+          workspaceId,
+          contactId: contact.id,
+          channel: 'WHATSAPP',
+          status: { in: ['ACTIVE', 'PENDING'] },
+        },
+        orderBy: { lastMessageAt: 'desc' },
+      })
+      if (!conversation) {
+        conversation = await db.conversation.create({
+          data: {
+            workspaceId,
+            contactId: contact.id,
+            channel: 'WHATSAPP',
+            status: 'ACTIVE',
+            currentStage: 'EXPLORATION',
+          },
+        })
+      }
+    } else {
+      conversation = await findConversationByContact(workspaceId, contact.id)
+      if (!conversation) {
+        conversation = await createRecord('conversations', {
+          workspaceId,
+          contactId: contact.id,
+          channel: 'WHATSAPP',
+          status: 'ACTIVE',
+          currentStage: 'EXPLORATION',
+        })
+      }
+    }
+
+    // Check for opt-out keywords
+    if (text) {
+      const optOutResult = detectOptOut(text)
+      if (optOutResult.optedOut) {
+        await markContactOptedOut(contact.id, optOutResult.keyword || 'unknown')
+        const prismaOK5 = await isPrismaReachable()
+        if (prismaOK5) {
+          await db.message.create({
+            data: {
+              conversationId: conversation.id,
+              direction: 'INBOUND',
+              content: text,
+              senderType: 'LEAD',
+              status: 'DELIVERED',
+              whatsappMessageId: messageId,
+              metadata: JSON.stringify({ optOut: true, optOutKeyword: optOutResult.keyword, source: 'baileys_railway' }),
+            },
+          })
+        } else {
+          await createRecord('messages', {
+            conversationId: conversation.id,
+            direction: 'INBOUND',
+            content: text,
+            senderType: 'LEAD',
+            status: 'DELIVERED',
+            whatsappMessageId: messageId,
+            metadata: JSON.stringify({ optOut: true, optOutKeyword: optOutResult.keyword, source: 'baileys_railway' }),
+          })
+        }
+        return
+      }
+    }
+
+    // Create inbound message
+    const prismaOK6 = await isPrismaReachable()
+    if (prismaOK6) {
+      await db.message.create({
+        data: {
+          conversationId: conversation.id,
+          direction: 'INBOUND',
+          content: text,
+          senderType: 'LEAD',
+          status: 'DELIVERED',
+          whatsappMessageId: messageId,
+          metadata: JSON.stringify({
+            source: 'baileys_railway',
+            instance: instanceName,
+            pushName,
+            from,
+          }),
+        },
+      })
+      await db.conversation.update({
+        where: { id: conversation.id },
+        data: { lastMessageAt: new Date() },
+      })
+    } else {
+      await createRecord('messages', {
+        conversationId: conversation.id,
+        direction: 'INBOUND',
+        content: text,
+        senderType: 'LEAD',
+        status: 'DELIVERED',
+        whatsappMessageId: messageId,
+        metadata: JSON.stringify({
+          source: 'baileys_railway',
+          instance: instanceName,
+          pushName,
+          from,
+        }),
+      })
+      await updateRecord('conversations', conversation.id, { lastMessageAt: new Date().toISOString() })
+    }
+
+    // Route to engine/process pipeline
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+      await fetch(`${appUrl}/api/engine/process`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-api-key': process.env.INTERNAL_API_KEY || '',
+        },
+        body: JSON.stringify({
+          conversationId: conversation.id,
+          messageContent: text,
+          workspaceId,
+        }),
+      })
+    } catch (engineError) {
+      console.error('[WhatsApp Webhook] Engine process error (Evolution):', engineError)
+    }
+
+    console.log(`[WhatsApp Webhook] Evolution message processed: ${messageId} from ${from} in workspace ${workspaceId.substring(0, 8)}`)
+  } catch (error) {
+    console.error('[WhatsApp Webhook] handleEvolutionMessage error:', error)
   }
 }
