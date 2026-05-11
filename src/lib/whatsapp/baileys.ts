@@ -111,6 +111,8 @@ function getAuthDir(workspaceId: string): string {
 
 /**
  * Save auth state files from /tmp to Supabase as JSON blob
+ * Uses `baileysAuthState` column if available, otherwise falls back
+ * to `accessToken` column (which is empty for Baileys connections).
  */
 async function saveAuthStateToSupabase(workspaceId: string, authDir: string): Promise<void> {
   try {
@@ -129,9 +131,9 @@ async function saveAuthStateToSupabase(workspaceId: string, authDir: string): Pr
     }
 
     const authStateJson = JSON.stringify(files)
-
     const supabase = getAdminClient()
-    // Try to update with baileysAuthState column
+
+    // Try with baileysAuthState column first
     const { error } = await supabase
       .from('whatsapp_configs')
       .update({
@@ -142,8 +144,22 @@ async function saveAuthStateToSupabase(workspaceId: string, authDir: string): Pr
       .eq('workspaceId', workspaceId)
 
     if (error) {
-      // Column might not exist yet — try without baileysAuthState
-      console.warn('[Baileys] Could not save auth state to Supabase:', error.message)
+      // Column doesn't exist yet — use accessToken as fallback storage
+      console.warn('[Baileys] baileysAuthState column not found, using accessToken fallback')
+      const { error: error2 } = await supabase
+        .from('whatsapp_configs')
+        .update({
+          accessToken: `baileys_auth:${authStateJson}`,
+          isActive: true,
+          updatedAt: new Date().toISOString(),
+        })
+        .eq('workspaceId', workspaceId)
+
+      if (error2) {
+        console.error('[Baileys] Could not save auth state:', error2.message)
+      } else {
+        console.log('[Baileys] Auth state saved to Supabase (accessToken fallback) for workspace', workspaceId.substring(0, 8))
+      }
     } else {
       console.log('[Baileys] Auth state saved to Supabase for workspace', workspaceId.substring(0, 8))
     }
@@ -154,22 +170,43 @@ async function saveAuthStateToSupabase(workspaceId: string, authDir: string): Pr
 
 /**
  * Restore auth state files from Supabase to /tmp directory
+ * Checks `baileysAuthState` column first, then falls back to `accessToken`.
  */
 async function restoreAuthStateFromSupabase(workspaceId: string, authDir: string): Promise<boolean> {
   try {
     const supabase = getAdminClient()
     const { data, error } = await supabase
       .from('whatsapp_configs')
-      .select('baileysAuthState')
+      .select('baileysAuthState, accessToken')
       .eq('workspaceId', workspaceId)
       .single()
 
-    if (error || !data?.baileysAuthState) {
+    let authStateJson: string | null = null
+
+    if (!error && data?.baileysAuthState) {
+      authStateJson = data.baileysAuthState
+    } else if (!error && data?.accessToken?.startsWith('baileys_auth:')) {
+      // Fallback: auth state stored in accessToken
+      authStateJson = data.accessToken.substring('baileys_auth:'.length)
+    } else {
+      // Try selecting only accessToken if baileysAuthState column doesn't exist
+      const { data: data2, error: error2 } = await supabase
+        .from('whatsapp_configs')
+        .select('accessToken')
+        .eq('workspaceId', workspaceId)
+        .single()
+
+      if (!error2 && data2?.accessToken?.startsWith('baileys_auth:')) {
+        authStateJson = data2.accessToken.substring('baileys_auth:'.length)
+      }
+    }
+
+    if (!authStateJson) {
       console.log('[Baileys] No saved auth state found for workspace', workspaceId.substring(0, 8))
       return false
     }
 
-    const files: Record<string, string> = JSON.parse(data.baileysAuthState)
+    const files: Record<string, string> = JSON.parse(authStateJson)
 
     // Create directory and write files
     fs.mkdirSync(authDir, { recursive: true })
@@ -187,6 +224,7 @@ async function restoreAuthStateFromSupabase(workspaceId: string, authDir: string
 
 /**
  * Update connection status in Supabase
+ * Uses baileys* columns if available, falls back to existing columns.
  */
 async function updateConnectionStatus(
   workspaceId: string,
@@ -196,23 +234,26 @@ async function updateConnectionStatus(
 ): Promise<void> {
   try {
     const supabase = getAdminClient()
+
+    // Try with new Baileys columns
     const updateData: Record<string, unknown> = {
       baileysConnected: connected,
+      isActive: connected,
       updatedAt: new Date().toISOString(),
     }
 
-    // Only include baileysPhone if column exists
     if (phone) {
       updateData.baileysPhone = phone
     }
-
-    // Update isActive based on connection
-    updateData.isActive = connected
 
     if (connected) {
       updateData.lastSyncAt = new Date().toISOString()
       updateData.connectionType = 'baileys'
       updateData.channelName = 'bielys'
+      // Store phone in businessAccountId as fallback
+      if (phone) {
+        updateData.businessAccountId = `baileys:${phone}`
+      }
     }
 
     const { error } = await supabase
@@ -221,17 +262,33 @@ async function updateConnectionStatus(
       .eq('workspaceId', workspaceId)
 
     if (error) {
-      console.warn('[Baileys] Could not update connection status:', error.message)
-      // Try with just basic columns
+      // New columns don't exist — use basic columns with creative fallback
+      console.warn('[Baileys] Some columns not found, using basic columns fallback')
+      const basicUpdate: Record<string, unknown> = {
+        isActive: connected,
+        updatedAt: new Date().toISOString(),
+      }
+
+      if (connected) {
+        basicUpdate.lastSyncAt = new Date().toISOString()
+        // Store phone in businessAccountId as fallback
+        if (phone) {
+          basicUpdate.businessAccountId = `baileys:${phone}`
+        }
+        // Store connection type marker in wabaId
+        basicUpdate.wabaId = 'baileys'
+      } else {
+        // Clear the Baileys auth state from accessToken on disconnect
+        basicUpdate.businessAccountId = null
+      }
+
       const { error: error2 } = await supabase
         .from('whatsapp_configs')
-        .update({
-          isActive: connected,
-          updatedAt: new Date().toISOString(),
-        })
+        .update(basicUpdate)
         .eq('workspaceId', workspaceId)
+
       if (error2) {
-        console.warn('[Baileys] Also failed with basic update:', error2.message)
+        console.warn('[Baileys] Basic update also failed:', error2.message)
       }
     }
   } catch (err: any) {
@@ -480,20 +537,49 @@ export async function getBaileysStatus(workspaceId: string): Promise<BaileysStat
   // Check Supabase for persisted status
   try {
     const supabase = getAdminClient()
+
+    // Try with baileys* columns first
     const { data, error } = await supabase
       .from('whatsapp_configs')
-      .select('isActive, baileysConnected, baileysPhone, connectionType, lastSyncAt')
+      .select('isActive, baileysConnected, baileysPhone, connectionType, lastSyncAt, businessAccountId, wabaId')
       .eq('workspaceId', workspaceId)
       .single()
 
     if (!error && data) {
+      // Check via baileys* columns
       const isConnected = data.baileysConnected === true || (data.connectionType === 'baileys' && data.isActive === true)
+
+      // Fallback: check wabaId marker or businessAccountId prefix
+      const isBaileysConnection = data.connectionType === 'baileys' || data.wabaId === 'baileys' || data.businessAccountId?.startsWith('baileys:')
+
+      const phone = data.baileysPhone || (data.businessAccountId?.startsWith('baileys:') ? data.businessAccountId.replace('baileys:', '') : null)
+
       return {
-        connected: isConnected,
-        status: isConnected ? 'connected' : 'disconnected',
-        phone: data.baileysPhone || null,
+        connected: isConnected || (isBaileysConnection && data.isActive === true),
+        status: (isConnected || (isBaileysConnection && data.isActive)) ? 'connected' : 'disconnected',
+        phone,
         userName: null,
         lastConnectedAt: data.lastSyncAt || null,
+      }
+    }
+
+    // Try with only basic columns
+    const { data: data2, error: error2 } = await supabase
+      .from('whatsapp_configs')
+      .select('isActive, lastSyncAt, businessAccountId, wabaId')
+      .eq('workspaceId', workspaceId)
+      .single()
+
+    if (!error2 && data2) {
+      const isBaileys = data2.wabaId === 'baileys' || data2.businessAccountId?.startsWith('baileys:')
+      const phone = data2.businessAccountId?.startsWith('baileys:') ? data2.businessAccountId.replace('baileys:', '') : null
+
+      return {
+        connected: isBaileys && data2.isActive === true,
+        status: (isBaileys && data2.isActive) ? 'connected' : 'disconnected',
+        phone,
+        userName: null,
+        lastConnectedAt: data2.lastSyncAt || null,
       }
     }
   } catch (err: any) {
@@ -540,19 +626,37 @@ export async function disconnectBaileys(workspaceId: string, clearSession = true
       // Clear auth state from Supabase
       try {
         const supabase = getAdminClient()
-        await supabase
+        // Try with baileys* columns
+        const { error } = await supabase
           .from('whatsapp_configs')
           .update({
             baileysAuthState: null,
             baileysConnected: false,
             baileysPhone: null,
             isActive: false,
+            accessToken: '',  // Clear auth state fallback
+            businessAccountId: null, // Clear phone fallback
+            wabaId: null,    // Clear connection type marker
             updatedAt: new Date().toISOString(),
           })
           .eq('workspaceId', workspaceId)
+
+        if (error) {
+          // Fallback: clear only basic columns
+          await supabase
+            .from('whatsapp_configs')
+            .update({
+              isActive: false,
+              accessToken: '',  // Clear auth state stored as fallback
+              businessAccountId: null,
+              wabaId: null,
+              updatedAt: new Date().toISOString(),
+            })
+            .eq('workspaceId', workspaceId)
+        }
       } catch (err: any) {
         console.warn('[Baileys] Error clearing Supabase session:', err.message)
-        // Try basic update
+        // Last resort: just clear isActive
         try {
           const supabase = getAdminClient()
           await supabase
